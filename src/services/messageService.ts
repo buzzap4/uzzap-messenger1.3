@@ -1,9 +1,30 @@
-import { supabase } from '../../lib/supabase';
+import { supabase, checkRateLimit } from '../../lib/supabase';
+import { validateMessageContent } from '../../lib/validation';
 
 export const sendMessage = async (content: string, chatroom_id: string) => {
   try {
+    // Validate and sanitize the message content
+    const contentValidation = validateMessageContent(content);
+    if (!contentValidation.valid) {
+      return { 
+        data: null, 
+        error: new Error(contentValidation.message || 'Invalid message content') 
+      };
+    }
+
+    const sanitizedContent = contentValidation.sanitized || '';
+
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('No active session');
+
+    // Check rate limiting
+    const rateLimitCheck = await checkRateLimit(session.user.id);
+    if (!rateLimitCheck.allowed) {
+      return { 
+        data: null, 
+        error: new Error(rateLimitCheck.message || 'Rate limit exceeded') 
+      };
+    }
 
     // First check/create membership
     await supabase
@@ -12,13 +33,11 @@ export const sendMessage = async (content: string, chatroom_id: string) => {
         chatroom_id, 
         user_id: session.user.id 
       });
-    console.log("Sending message with:", {content, chatroom_id, userId:session.user.id})
-
 
     const { data, error } = await supabase
       .from('messages')
       .insert({
-        content,
+        content: sanitizedContent,
         chatroom_id,
         user_id: session.user.id,
       })
@@ -35,7 +54,7 @@ export const sendMessage = async (content: string, chatroom_id: string) => {
     if (error) throw error;
     return { data, error: null };
   } catch (error) {
-    console.error('Error sending message:', error);
+    console.error('Error sending message');
     return { data: null, error };
   }
 };
@@ -50,12 +69,8 @@ export const fetchMessages = async (chatroom_id: string) => {
         created_at,
         is_edited,
         is_deleted,
-<<<<<<< HEAD
-
-=======
         chatroom_id,
         user_id,
->>>>>>> c589710 (Pre-build configuration updates)
         user:profiles!messages_user_id_fkey (
           id,
           username,
@@ -68,14 +83,9 @@ export const fetchMessages = async (chatroom_id: string) => {
         )
       `)
       .eq('chatroom_id', chatroom_id)
-<<<<<<< HEAD
-      .order('created_at', { ascending: false });
-      
-=======
       .order('created_at', { ascending: false })
       .limit(20);
 
->>>>>>> c589710 (Pre-build configuration updates)
     if (error) throw error;
 
     const data = rawData?.map(message => ({
@@ -91,7 +101,7 @@ export const fetchMessages = async (chatroom_id: string) => {
 
     return { data, error: null };
   } catch (error) {
-    console.error('Error fetching messages:', error);
+    console.error('Error fetching messages');
     return { data: null, error };
   }
 };

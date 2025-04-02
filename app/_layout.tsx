@@ -8,7 +8,9 @@ import { AuthProvider } from '@/context/auth';
 import { ToastProvider } from '@/context/toast';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
-import Header from '@/components/Header';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { COLORS } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -17,17 +19,16 @@ function StackNavigator() {
   return (
     <Stack
       screenOptions={{
-        headerShown: true,
-        header: () => <Header />,
+        headerShown: false,
         contentStyle: {
-          backgroundColor: colors.background
+          backgroundColor: COLORS.background
         },
         animation: 'slide_from_right',
       }}
     >
       <Stack.Screen 
         name="(tabs)" 
-        options={{ headerShown: true }} 
+        options={{ headerShown: false }} 
       />
       <Stack.Screen 
         name="(auth)" 
@@ -36,31 +37,28 @@ function StackNavigator() {
       <Stack.Screen 
         name="chatroom/[id]" 
         options={{ 
-          headerShown: true,
-          presentation: 'card'  // Changed from 'push' to 'card'
+          headerShown: false,
+          presentation: 'card'
         }} 
       />
       <Stack.Screen 
         name="direct-message/[id]" 
         options={{ 
-          headerShown: true,
-          presentation: 'card'  // Changed from 'push' to 'card'
+          headerShown: false,
+          presentation: 'card'
         }} 
       />
       <Stack.Screen 
         name="new-message" 
-        options={{ 
-          headerShown: true,
-          presentation: 'modal'
-        }} 
+        options={{ headerShown: false }} 
       />
       <Stack.Screen 
         name="privacy-settings" 
-        options={{ headerShown: true }} 
+        options={{ headerShown: false }} 
       />
       <Stack.Screen 
         name="blocked-users" 
-        options={{ headerShown: true }} 
+        options={{ headerShown: false }} 
       />
     </Stack>
   );
@@ -87,13 +85,17 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <ToastProvider>
-          <StackNavigator />
-          <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-        </ToastProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <ToastProvider>
+              <StackNavigator />
+              <StatusBar style="dark" />
+            </ToastProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

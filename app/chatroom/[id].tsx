@@ -1,434 +1,433 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, StyleSheet, Text, KeyboardAvoidingView, Platform, Alert, Modal, TouchableOpacity } from 'react-native';
-import { GiftedChat, IMessage, Bubble, InputToolbar, Send, Actions, Composer } from 'react-native-gifted-chat';
-import { MaterialIcons } from '@expo/vector-icons';
-import EmojiSelector from 'react-native-emoji-selector';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  View,
+  FlatList,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  RefreshControl,
+  Text,
+} from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth';
-import { useTheme } from '@/context/theme';
-import { useProfile } from '@/src/hooks/useProfile';
 import { useMessages } from '@/src/hooks/useMessages';
-import { verifyOrJoinChatroom } from '@/src/services/chatroomService';
-import { Message as DatabaseMessage, User } from '@/src/types/models';
-import { ChatMessage } from '@/src/types/chat';
-import TypingIndicator from '@/components/TypingIndicator';
+import { supabase } from '@/lib/supabase';
+import { Message as MessageType, User } from '@/src/types/models';
+import { COLORS, SIZES } from '@/theme';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSequence,
+  withDelay,
+  Easing,
+} from 'react-native-reanimated';
+
+// Import our new UI components
+import ChatHeader from '@/src/components/chat/ChatHeader';
+import ChatInput from '@/src/components/chat/ChatInput';
+import ChatBubble from '@/src/components/chat/ChatBubble';
+import Button from '@/src/components/ui/Button';
+import Card from '@/src/components/ui/Card';
+
+// Import services
+import { sendMessage } from '@/src/services/messageService';
+import { joinChatroom, verifyOrJoinChatroom } from '@/src/services/chatroomService';
+
+// Define the getChatroom function since it's missing
+const getChatroom = async (chatroomId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('chatrooms')
+      .select(`
+        id,
+        name,
+        description,
+        avatar_url,
+        created_at,
+        updated_at,
+        region_id,
+        created_by,
+        members_count:chatroom_memberships(count)
+      `)
+      .eq('id', chatroomId)
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error fetching chatroom:', error);
+    throw error;
+  }
+};
 
 export default function ChatRoomScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { session } = useAuth();
-  const { colors } = useTheme();
-  const { profile, loading: profileLoading, fetchProfile } = useProfile();
-  const { messages, loading: messagesLoading, hasMore, error: messagesError, refresh: fetchMessages, addMessage } = useMessages(id as string);
+  const insets = useSafeAreaInsets();
+  
+  const [chatroomName, setChatroomName] = useState<string>('');
+  const [isJoining, setIsJoining] = useState<boolean>(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [sendingMessage, setSendingMessage] = useState<boolean>(false);
+  const [chatroomInfo, setChatroomInfo] = useState<any>(null);
+  
+  const { messages, loading, error, refresh, addMessage } = useMessages(id);
+  const flatListRef = useRef<FlatList>(null);
+  
+  // Animation values
+  const headerOpacity = useSharedValue(0);
+  const contentOpacity = useSharedValue(0);
+  const inputOpacity = useSharedValue(0);
+  const errorShake = useSharedValue(0);
 
-  const [isEmojiPickerVisible, setIsEmojiPickerVisible] = useState(false);
-  const [isColorPickerVisible, setIsColorPickerVisible] = useState(false);
-  const [composerText, setComposerText] = useState('');
-  const [currentBubbleColor, setCurrentBubbleColor] = useState(colors.primary);
-  const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
-  const [isTyping, setIsTyping] = useState(false);
-  const typingTimeoutRef = useRef<NodeJS.Timeout>();
-
-  const bubbleColors = [
-    colors.primary,
-    '#FF69B4', // pink
-    '#4169E1', // royal blue
-    '#32CD32', // lime green
-    '#FF8C00', // dark orange
-    '#8A2BE2', // blue violet
-  ];
-
-  useEffect(() => {
-    if (id && session?.user?.id) {
-      fetchProfile(session.user.id);
-    }
-  }, [id, session?.user?.id, fetchProfile]);
-
-  useEffect(() => {
-    const typingChannel = supabase.channel(`typing:${id}`)
-      .on('broadcast', { event: 'typing' }, ({ payload }) => {
-        if (payload.userId !== session?.user?.id) {
-          setTypingUsers(prev => new Set(prev).add(payload.userId));
-          // Clear typing indicator after 3 seconds
-          setTimeout(() => {
-            setTypingUsers(prev => {
-              const newSet = new Set(prev);
-              newSet.delete(payload.userId);
-              return newSet;
-            });
-          }, 3000);
-        }
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(typingChannel);
-    };
-  }, [id, session?.user?.id]);
-
-  const getFallbackAvatar = (userId: string) => {
-    return `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}&backgroundColor=random`;
-  };
-
-  const handleSendMessage = async (content: string, type: 'text' | 'image' = 'text', bubbleColor?: string) => {
-    if (!id || !session?.user?.id || !profile?.id) {
-      Alert.alert('Error', 'Please sign in to send messages');
-      return;
-    }
-
+  // Fetch chatroom info
+  const fetchChatroomInfo = useCallback(async () => {
+    if (!id || !session) return;
+    
     try {
-      const { success } = await verifyOrJoinChatroom(id, session.user.id);
+      const data = await getChatroom(id);
+      if (data) {
+        setChatroomInfo(data);
+        setChatroomName(data.name);
+      }
+    } catch (error) {
+      console.error('Error fetching chatroom info:', error);
+    }
+  }, [id, session]);
+
+  // Join chatroom
+  const handleJoinChatroom = useCallback(async () => {
+    if (!id || !session) return;
+    
+    setIsJoining(true);
+    setJoinError(null);
+    
+    try {
+      const { error } = await joinChatroom(id);
+      
+      if (error) {
+        setJoinError(error.message || 'Failed to join chatroom');
+        // Animate error shake
+        errorShake.value = withSequence(
+          withTiming(-10, { duration: 100 }),
+          withTiming(10, { duration: 100 }),
+          withTiming(-10, { duration: 100 }),
+          withTiming(0, { duration: 100 })
+        );
+      } else {
+        // Refresh chatroom info after joining
+        await fetchChatroomInfo();
+      }
+    } catch (error: any) {
+      setJoinError(error.message || 'Failed to join chatroom');
+      // Animate error shake
+      errorShake.value = withSequence(
+        withTiming(-10, { duration: 100 }),
+        withTiming(10, { duration: 100 }),
+        withTiming(-10, { duration: 100 }),
+        withTiming(0, { duration: 100 })
+      );
+    } finally {
+      setIsJoining(false);
+    }
+  }, [id, session, fetchChatroomInfo, errorShake]);
+
+  // Verify or join chatroom
+  const handleVerifyOrJoinChatroom = useCallback(async () => {
+    if (!id || !session) return false;
+    
+    try {
+      const { success, error } = await verifyOrJoinChatroom(id, session.user.id);
+      
       if (!success) {
-        Alert.alert('Error', 'Failed to verify chatroom membership');
+        setJoinError(error?.message || 'Failed to join chatroom');
+        return false;
+      }
+      
+      return true;
+    } catch (error: any) {
+      setJoinError(error.message || 'Failed to join chatroom');
+      return false;
+    }
+  }, [id, session]);
+
+  // Send message
+  const handleSendMessage = useCallback(async (content: string) => {
+    if (!id || !session || !content.trim()) return;
+    
+    setSendingMessage(true);
+    
+    try {
+      // Verify or join chatroom before sending message
+      const canSend = await handleVerifyOrJoinChatroom();
+      
+      if (!canSend) {
+        Alert.alert('Error', 'You need to join this chatroom first');
+        setSendingMessage(false);
         return;
       }
-
-      const tempId = 'temp-' + Date.now();
-      const optimisticMessage: DatabaseMessage = {
-        id: tempId,
-        content,
-        user_id: session.user.id,
-        chatroom_id: id,
-        created_at: new Date().toISOString(),
-        is_edited: false,
-        is_deleted: false,
-        bubble_color: bubbleColor,
-        user: profile
-      };
-
-      addMessage(optimisticMessage);
-
-      const { data: newMessage, error: messageError } = await supabase
-        .from('messages')
-        .insert({
-          chatroom_id: id,
-          content,
-          user_id: session.user.id,
-          bubble_color: bubbleColor,
-        })
-        .select(`
-          *,
-          profiles:profiles!messages_user_id_fkey (*)
-        `)
-        .single();
-
-      if (messageError) throw messageError;
-    } catch (error) {
-      Alert.alert('Error', 'Failed to send message');
+      
+      const { data, error } = await sendMessage(content, id);
+      
+      if (data) {
+        // Add message to local state
+        addMessage(data);
+        
+        // Scroll to bottom
+        setTimeout(() => {
+          flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+        }, 100);
+      } else {
+        Alert.alert('Error', error?.message || 'Failed to send message');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to send message');
+    } finally {
+      setSendingMessage(false);
     }
-  };
+  }, [id, session, handleVerifyOrJoinChatroom, addMessage]);
 
-  const handleSend = async (messages: IMessage[]) => {
-    const [message] = messages;
-    await handleSendMessage(message.text, 'text', currentBubbleColor);
-  };
-
-  const transformToGiftedMessage = (message: DatabaseMessage): ChatMessage => {
-    const messageUser = message.user || {
-      id: message.user_id,
-      username: 'Unknown',
-      avatar_url: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    return {
-      _id: message.id,
-      text: message.content,
-      createdAt: new Date(message.created_at),
-      user: {
-        _id: messageUser.id,
-        name: messageUser.username,
-        avatar: messageUser.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${messageUser.id}`
-      },
-      bubble_color: message.bubble_color
-    };
-  };
-
-  const onSend = useCallback(async (messages: IMessage[]) => {
-    await handleSend(messages);
-  }, [handleSend]);
-
-  const handleInputTextChanged = (text: string) => {
-    setComposerText(text);
+  // Initialize screen
+  useEffect(() => {
+    if (!id || !session) return;
     
-    if (!isTyping) {
-      setIsTyping(true);
-      supabase.channel(`typing:${id}`).send({
-        type: 'broadcast',
-        event: 'typing',
-        payload: { userId: session?.user?.id }
-      });
-    }
+    // Start animations
+    headerOpacity.value = withTiming(1, { duration: 500 });
+    contentOpacity.value = withDelay(200, withTiming(1, { duration: 500 }));
+    inputOpacity.value = withDelay(400, withTiming(1, { duration: 500 }));
+    
+    // Fetch chatroom info
+    fetchChatroomInfo();
+    
+    // Check if user is already a member
+    handleVerifyOrJoinChatroom();
+  }, [id, session, fetchChatroomInfo, handleVerifyOrJoinChatroom]);
 
-    // Reset typing timeout
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
+  // Animated styles
+  const headerAnimStyle = useAnimatedStyle(() => {
+    return {
+      opacity: headerOpacity.value,
+      transform: [
+        { translateY: withTiming(headerOpacity.value * 0, { duration: 500 }) }
+      ],
+    };
+  });
+  
+  const contentAnimStyle = useAnimatedStyle(() => {
+    return {
+      opacity: contentOpacity.value,
+      transform: [
+        { translateY: withTiming((1 - contentOpacity.value) * 20, { duration: 500 }) }
+      ],
+    };
+  });
+  
+  const inputAnimStyle = useAnimatedStyle(() => {
+    return {
+      opacity: inputOpacity.value,
+      transform: [
+        { translateY: withTiming((1 - inputOpacity.value) * 20, { duration: 500 }) }
+      ],
+    };
+  });
+  
+  const errorAnimStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateX: errorShake.value }],
+    };
+  });
 
-    typingTimeoutRef.current = setTimeout(() => {
-      setIsTyping(false);
-    }, 3000);
-  };
-
-  const renderBubble = (props: any) => {
-    const currentMessage = props.currentMessage as IMessage & { bubble_color?: string };
+  // Render message item
+  const renderMessageItem = ({ item, index }: { item: MessageType; index: number }) => {
+    const previousMessage = index < messages.length - 1 ? messages[index + 1] : null;
+    const nextMessage = index > 0 ? messages[index - 1] : null;
+    
+    // Create a complete User object with required properties
+    const currentUser: User = {
+      id: session?.user.id || '',
+      username: session?.user.user_metadata?.username || '',
+      avatar_url: session?.user.user_metadata?.avatar_url || null,
+      created_at: '',
+      updated_at: ''
+    };
+    
     return (
-      <Bubble
-        {...props}
-        wrapperStyle={{
-          right: {
-            backgroundColor: currentMessage?.bubble_color || colors.primary
-          },
-          left: {
-            backgroundColor: colors.surface
-          }
-        }}
-        textStyle={{
-          right: {
-            color: '#fff'
-          },
-          left: {
-            color: colors.text
+      <ChatBubble
+        message={item}
+        currentUser={currentUser}
+        previousMessage={previousMessage}
+        nextMessage={nextMessage}
+        onLongPress={(message) => {
+          // Handle long press (e.g., show options to delete/edit)
+          if (message.user_id === session?.user.id) {
+            Alert.alert(
+              'Message Options',
+              'What would you like to do?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Edit', onPress: () => {} },
+                { text: 'Delete', style: 'destructive', onPress: () => {} },
+              ]
+            );
           }
         }}
       />
     );
   };
 
-  const renderActions = (props: any) => (
-    <Actions
-      {...props}
-      containerStyle={styles.actionButton}
-      icon={() => (
-        <MaterialIcons name="emoji-emotions" size={24} color={colors.text} />
-      )}
-      onPressActionButton={() => setIsEmojiPickerVisible(true)}
-    />
-  );
-
-  const renderComposer = (props: any) => (
-    <Composer
-      {...props}
-      textInputStyle={[styles.composer, { color: colors.text, backgroundColor: colors.surface }]}
-    />
-  );
-
-  const renderInputToolbar = (props: any) => (
-    <InputToolbar
-      {...props}
-      containerStyle={[styles.inputToolbar, { backgroundColor: colors.surface, borderTopColor: colors.border }]}
-      primaryStyle={{ alignItems: 'center' }}
-      renderActions={renderActions}
-      renderComposer={renderComposer}
-    />
-  );
-
-  const renderSend = (props: any) => (
-    <View style={styles.sendContainer}>
-      <TouchableOpacity 
-        style={[styles.colorButton, { backgroundColor: currentBubbleColor }]}
-        onPress={() => setIsColorPickerVisible(true)}
-      >
-        <MaterialIcons name="color-lens" size={20} color="#fff" />
-      </TouchableOpacity>
-      <Send
-        {...props}
-        containerStyle={styles.sendButton}
-      />
-    </View>
-  );
-
-  const fetchMoreMessages = async () => {
-    if (!hasMore || messagesLoading) return;
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage) {
-      await fetchMessages();
-    }
-  };
-
-  if (!id || messagesError) {
+  // Render loading state
+  if (loading && messages.length === 0) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>
-          {!id ? 'Invalid chatroom ID' : messagesError}
-        </Text>
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
       </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
-      <GiftedChat
-        messages={messages.map(transformToGiftedMessage)}
-        onSend={onSend}
-        user={{
-          _id: session?.user?.id || '',
-          name: profile?.username || 'Me',
-          avatar: profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${session?.user?.id}`
-        }}
-        text={composerText}
-        onInputTextChanged={handleInputTextChanged}
-        renderBubble={renderBubble}
-        renderInputToolbar={renderInputToolbar}
-        renderSend={renderSend}
-        showAvatarForEveryMessage={true}
-        renderAvatarOnTop={true}
-        showUserAvatar={true}
-        alwaysShowSend
-        scrollToBottomComponent={() => null}
-        inverted={true}
-        infiniteScroll
-        isLoadingEarlier={messagesLoading}
-        onLoadEarlier={fetchMoreMessages}
-        loadEarlier={hasMore}
-        renderUsernameOnMessage={true}
-        renderFooter={() => typingUsers.size > 0 ? <TypingIndicator /> : null}
-      />
-      <Modal
-        visible={isEmojiPickerVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setIsEmojiPickerVisible(false)}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay}
-          onPress={() => setIsEmojiPickerVisible(false)}
-        >
-          <View style={styles.emojiPickerContainer}>
-            <EmojiSelector
-              onEmojiSelected={(emoji) => {
-                setComposerText(prev => prev + emoji);
-                setIsEmojiPickerVisible(false);
-              }}
-              showSearchBar={false}
-              columns={8}
-              showHistory={false}
+    <View style={[styles.container, { paddingBottom: insets.bottom }]}>
+      <StatusBar style="dark" />
+      
+      {/* Chat Header */}
+      <Animated.View style={headerAnimStyle}>
+        <ChatHeader
+          title={chatroomName || `Chatroom ${id}`}
+          subtitle={chatroomInfo?.description || ''}
+          avatarUri={chatroomInfo?.avatar_url}
+          membersCount={chatroomInfo?.members_count}
+          onInfoPress={() => {
+            // Show chatroom info
+          }}
+        />
+      </Animated.View>
+      
+      {/* Messages List */}
+      <Animated.View style={[styles.messagesContainer, contentAnimStyle]}>
+        {error ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>
+              {error}
+            </Text>
+            <Button
+              title="Retry"
+              onPress={refresh}
+              variant="primary"
+              size="small"
+              style={{ marginTop: 10 }}
             />
           </View>
-        </TouchableOpacity>
-      </Modal>
-      <Modal
-        visible={isColorPickerVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setIsColorPickerVisible(false)}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay}
-          onPress={() => setIsColorPickerVisible(false)}
-        >
-          <View style={styles.colorPickerContainer}>
-            <View style={styles.colorGrid}>
-              {bubbleColors.map((color) => (
-                <TouchableOpacity
-                  key={color}
-                  style={[
-                    styles.colorOption,
-                    { backgroundColor: color },
-                    currentBubbleColor === color && styles.selectedColor
-                  ]}
-                  onPress={() => {
-                    setCurrentBubbleColor(color);
-                    setIsColorPickerVisible(false);
-                  }}
-                />
-              ))}
-            </View>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-    </KeyboardAvoidingView>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            keyExtractor={(item) => item.id}
+            renderItem={renderMessageItem}
+            inverted
+            contentContainerStyle={styles.messagesList}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={loading}
+                onRefresh={refresh}
+                colors={[COLORS.primary]}
+                tintColor={COLORS.primary}
+              />
+            }
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>
+                  No messages yet. Be the first to send a message!
+                </Text>
+              </View>
+            }
+          />
+        )}
+      </Animated.View>
+      
+      {/* Join Chatroom Error */}
+      {joinError && (
+        <Animated.View style={[styles.joinErrorContainer, errorAnimStyle]}>
+          <Card shadowLevel="light" style={styles.joinErrorCard}>
+            <Text style={styles.joinErrorText}>{joinError}</Text>
+            <Button
+              title="Join Chatroom"
+              onPress={handleJoinChatroom}
+              loading={isJoining}
+              disabled={isJoining}
+              variant="primary"
+              size="small"
+              style={{ marginTop: 10 }}
+            />
+          </Card>
+        </Animated.View>
+      )}
+      
+      {/* Chat Input */}
+      <Animated.View style={inputAnimStyle}>
+        <ChatInput
+          onSend={handleSendMessage}
+          placeholder="Type a message..."
+          disabled={sendingMessage || !!joinError}
+          loading={sendingMessage}
+        />
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  messagesContainer: {
+    flex: 1,
+  },
+  messagesList: {
+    paddingVertical: 10,
+  },
+  emptyContainer: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: COLORS.textSecondary,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
   errorText: {
-    color: 'red',
     textAlign: 'center',
-    marginTop: 20,
-    fontSize: 16,
+    color: COLORS.error,
+    marginBottom: 10,
   },
-  actionButton: {
-    width: 44,
-    height: 44,
+  joinErrorContainer: {
+    position: 'absolute',
+    bottom: 80,
+    left: 0,
+    right: 0,
+    padding: SIZES.padding,
+  },
+  joinErrorCard: {
+    padding: SIZES.padding,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 4,
-    marginRight: 4,
-    marginBottom: 0,
   },
-  composer: {
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    marginLeft: 0,
-    marginRight: 5,
-    marginBottom: 5,
-    minHeight: 40,
-  },
-  inputToolbar: {
-    padding: 8,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  emojiPickerContainer: {
-    backgroundColor: 'white',
-    height: '40%',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    overflow: 'hidden',
-  },
-  colorPickerContainer: {
-    backgroundColor: 'white',
-    padding: 16,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    marginBottom: 80,
-  },
-  colorGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  colorOption: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    margin: 4,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  selectedColor: {
-    borderColor: '#000',
-    transform: [{ scale: 1.1 }],
-  },
-  sendContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  colorButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  sendButton: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 5,
+  joinErrorText: {
+    color: COLORS.error,
+    textAlign: 'center',
   },
 });

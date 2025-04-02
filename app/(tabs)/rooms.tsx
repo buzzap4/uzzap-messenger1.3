@@ -1,14 +1,44 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator, Platform } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  FlatList, 
+  TouchableOpacity, 
+  Alert, 
+  ActivityIndicator, 
+  Platform,
+  RefreshControl,
+  StatusBar,
+  Dimensions
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import FloatingActionButton from '@/components/FloatingActionButton';
-import RegionDropdown from '@/components/RegionDropdown';
-import { MapPin, MessageCircle, Users, LogIn, LogOut } from 'lucide-react-native';
-import { useTheme } from '@/context/theme';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/auth';
 import { joinChatroom, leaveChatroom, isUserInChatroom } from '@/src/services/chatroomService';
 import type { Region, Province } from '@/types/Region';
+import { COLORS, SIZES, SHADOWS } from '@/theme';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSequence,
+  withDelay,
+  FadeIn,
+  FadeInUp,
+  SlideInRight,
+  Easing,
+  ZoomIn,
+} from 'react-native-reanimated';
+import LinearGradient from 'react-native-linear-gradient';
+
+// Import our UI components
+import Button from '@/src/components/ui/Button';
+import Card from '@/src/components/ui/Card';
+import ChatroomItem from '@/src/components/chat/ChatroomItem';
+
+const { width } = Dimensions.get('window');
 
 interface ExtendedProvince extends Province {
   chatrooms?: Array<{
@@ -17,12 +47,14 @@ interface ExtendedProvince extends Province {
     description: string | null;
     is_active: boolean;
     max_members: number;
+    last_message?: string;
+    last_message_time?: string;
+    members_count?: number;
   }>;
 }
 
 export default function RoomsScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
   const { session } = useAuth();
   const [regions, setRegions] = useState<Region[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,8 +62,14 @@ export default function RoomsScreen() {
   const [selectedRegion, setSelectedRegion] = useState<Region | null>(null);
   const [membershipStatus, setMembershipStatus] = useState<{ [key: string]: boolean }>({});
   const [joiningRoom, setJoiningRoom] = useState<string | null>(null);
-  const [onlineUsers, setOnlineUsers] = useState<{ [key: string]: boolean }>({});
-  const [chatMessages, setChatMessages] = useState<{ [key: string]: number }>({});
+  const [onlineUsers, setOnlineUsers] = useState<{ [key: string]: number }>({});
+  const [unreadMessages, setUnreadMessages] = useState<{ [key: string]: number }>({});
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Animation values
+  const headerOpacity = useSharedValue(0);
+  const contentOpacity = useSharedValue(0);
+  const fabScale = useSharedValue(0);
 
   const createDefaultChatroom = async (provinceId: string, provinceName: string) => {
     try {
@@ -78,6 +116,9 @@ export default function RoomsScreen() {
 
   const fetchRegions = async () => {
     try {
+      setLoading(true);
+      setError(null);
+      
       const { data: regionsData, error: regionsError } = await supabase
         .from('regions')
         .select(`
@@ -131,252 +172,403 @@ export default function RoomsScreen() {
       if (processedRegions.length > 0 && !selectedRegion) {
         setSelectedRegion(processedRegions[0]);
       }
+      
+      // Fetch last messages for each chatroom
+      await fetchLastMessages(processedRegions);
+      
+      // Start animations
+      headerOpacity.value = withTiming(1, { duration: 500 });
+      contentOpacity.value = withDelay(200, withTiming(1, { duration: 500 }));
+      fabScale.value = withDelay(400, withTiming(1, { duration: 300 }));
+      
     } catch (error) {
       console.error('Error fetching regions:', error);
       setError('Failed to load regions');
     } finally {
       setLoading(false);
+      setRefreshing(false);
+    }
+  };
+  
+  const fetchLastMessages = async (regions: Region[]) => {
+    try {
+      const chatroomIds = regions.flatMap(region => 
+        region.provinces.flatMap(province => 
+          (province.chatrooms || []).map(chatroom => chatroom.id)
+        )
+      );
+      
+      if (chatroomIds.length === 0) return;
+      
+      // Fetch last message for each chatroom
+      const { data: lastMessages, error } = await supabase
+        .from('messages')
+        .select(`
+          id,
+          content,
+          created_at,
+          chatroom_id
+        `)
+        .in('chatroom_id', chatroomIds)
+        .order('created_at', { ascending: false })
+        .limit(1, { foreignTable: 'chatroom_id' });
+
+      if (error) {
+        console.error('Error fetching last messages:', error);
+        return;
+      }
+      
+      // Update chatrooms with last message
+      const updatedRegions = regions.map(region => ({
+        ...region,
+        provinces: region.provinces.map(province => ({
+          ...province,
+          chatrooms: (province.chatrooms || []).map(chatroom => {
+            const lastMessage = lastMessages?.find(msg => msg.chatroom_id === chatroom.id);
+            return {
+              ...chatroom,
+              last_message: lastMessage?.content || '',
+              last_message_time: lastMessage?.created_at || ''
+            };
+          })
+        }))
+      }));
+      
+      setRegions(updatedRegions);
+      
+      // Fetch membership status for each chatroom
+      await fetchMembershipStatus(chatroomIds);
+      
+      // Fetch online users count for each chatroom
+      await fetchOnlineUsers(chatroomIds);
+      
+      // Fetch unread messages count for each chatroom
+      await fetchUnreadMessages(chatroomIds);
+      
+    } catch (error) {
+      console.error('Error in fetchLastMessages:', error);
+    }
+  };
+  
+  const fetchMembershipStatus = async (chatroomIds: string[]) => {
+    if (!session?.user?.id || chatroomIds.length === 0) return;
+    
+    try {
+      const statuses: { [key: string]: boolean } = {};
+      
+      for (const chatroomId of chatroomIds) {
+        const isMember = await isUserInChatroom(chatroomId, session.user.id);
+        statuses[chatroomId] = isMember;
+      }
+      
+      setMembershipStatus(statuses);
+    } catch (error) {
+      console.error('Error fetching membership status:', error);
+    }
+  };
+  
+  const fetchOnlineUsers = async (chatroomIds: string[]) => {
+    if (chatroomIds.length === 0) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('chatroom_members')
+        .select('chatroom_id, count')
+        .in('chatroom_id', chatroomIds)
+        .eq('is_online', true)
+        .group('chatroom_id');
+      
+      if (error) {
+        console.error('Error fetching online users:', error);
+        return;
+      }
+      
+      const onlineUsersCount: { [key: string]: number } = {};
+      
+      data?.forEach(item => {
+        onlineUsersCount[item.chatroom_id] = item.count || 0;
+      });
+      
+      setOnlineUsers(onlineUsersCount);
+    } catch (error) {
+      console.error('Error in fetchOnlineUsers:', error);
+    }
+  };
+  
+  const fetchUnreadMessages = async (chatroomIds: string[]) => {
+    if (!session?.user?.id || chatroomIds.length === 0) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('unread_messages')
+        .select('chatroom_id, count')
+        .in('chatroom_id', chatroomIds)
+        .eq('user_id', session.user.id)
+        .group('chatroom_id');
+      
+      if (error) {
+        console.error('Error fetching unread messages:', error);
+        return;
+      }
+      
+      const unreadCount: { [key: string]: number } = {};
+      
+      data?.forEach(item => {
+        unreadCount[item.chatroom_id] = item.count || 0;
+      });
+      
+      setUnreadMessages(unreadCount);
+    } catch (error) {
+      console.error('Error in fetchUnreadMessages:', error);
     }
   };
 
-  useEffect(() => {
+  const handleRefresh = () => {
+    setRefreshing(true);
     fetchRegions();
-  }, []);
+  };
 
-  useEffect(() => {
-    const initializeMembershipStatus = async () => {
-      if (!session?.user?.id) return;
+  const handleRegionSelect = (region: Region) => {
+    setSelectedRegion(region);
+  };
 
-      const membershipPromises = regions.flatMap(region =>
-        region.provinces.flatMap(province =>
-          (province.chatrooms || []).map(async chatroom => {
-            const { data } = await isUserInChatroom(chatroom.id, session.user.id);
-            return { [chatroom.id]: !!data };
-          })
-        )
-      );
-
-      const membershipResults = await Promise.all(membershipPromises);
-      const initialStatus = membershipResults.reduce((acc, status) => ({ ...acc, ...status }), {});
-      setMembershipStatus(initialStatus);
-    };
-
-    if (regions.length > 0) {
-      initializeMembershipStatus();
+  const handleChatroomPress = async (chatroomId: string) => {
+    if (!session?.user?.id) {
+      Alert.alert('Authentication Required', 'Please sign in to join chat rooms.');
+      return;
     }
-  }, [regions, session?.user?.id]);
-
-  useEffect(() => {
-    const onlineUsersSubscription = supabase
-      .channel('online-users')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: 'is_online=eq.true' }, (payload) => {
-        const userId = payload.new.id;
-        setOnlineUsers((prev) => ({ ...prev, [userId]: true }));
-      })
-      .subscribe();
-
-    const chatMessagesSubscription = supabase
-      .channel('new-message')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-        const { chatroom_id } = payload.new;
-        setChatMessages((prev) => ({
-          ...prev,
-          [chatroom_id]: (prev[chatroom_id] || 0) + 1,
-        }));
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(onlineUsersSubscription);
-      supabase.removeChannel(chatMessagesSubscription);
-    };
-  }, []);
-
-  const handleJoinRoom = async (chatroomId: string) => {
+    
     try {
-      setJoiningRoom(chatroomId);
-      await joinChatroom(chatroomId);
-      setMembershipStatus(prev => ({ ...prev, [chatroomId]: true }));
+      const isMember = membershipStatus[chatroomId];
+      
+      if (!isMember) {
+        setJoiningRoom(chatroomId);
+        await joinChatroom(chatroomId, session.user.id);
+        setMembershipStatus(prev => ({ ...prev, [chatroomId]: true }));
+        setJoiningRoom(null);
+      }
+      
       router.push(`/chatroom/${chatroomId}`);
     } catch (error) {
-      console.error('Error joining room:', error);
-      Alert.alert('Error', 'Failed to join room');
-    } finally {
+      console.error('Error joining chatroom:', error);
+      Alert.alert('Error', 'Failed to join chat room. Please try again.');
       setJoiningRoom(null);
     }
   };
 
-  const handleLeaveRoom = async (chatroomId: string) => {
-    try {
-      await leaveChatroom(chatroomId);
-      setMembershipStatus(prev => ({ ...prev, [chatroomId]: false }));
-      Alert.alert('Success', 'You have left the room');
-    } catch (error) {
-      console.error('Error leaving room:', error);
-      Alert.alert('Error', 'Failed to leave room');
-    }
-  };
-
-  const handleProvincePress = async (province: ExtendedProvince) => {
-    const chatroomId = province.chatrooms?.[0]?.id;
-
-    if (!chatroomId) {
-      Alert.alert('No Chatroom', `No chat room available for ${province.name}`);
+  const handleCreateChatroom = () => {
+    if (!session?.user?.id) {
+      Alert.alert('Authentication Required', 'Please sign in to create chat rooms.');
       return;
     }
-
-    const isMember = membershipStatus[chatroomId];
-
-    try {
-      if (isMember) {
-        await router.push({
-          pathname: '/chatroom/[id]',
-          params: { id: chatroomId },
-        });
-      } else {
-        Alert.alert(
-          'Join Room',
-          `Would you like to join the chat room for ${province.name}?`,
-          [
-            {
-              text: 'Cancel',
-              style: 'cancel',
-            },
-            {
-              text: 'Join',
-              onPress: async () => {
-                try {
-                  setJoiningRoom(chatroomId); // Indicate joining state
-                  await joinChatroom(chatroomId); // Call joinChatroom service
-                  setMembershipStatus((prev) => ({ ...prev, [chatroomId]: true })); // Update membership status
-                  router.push(`/chatroom/${chatroomId}`); // Navigate to chatroom
-                } catch (error) {
-                  console.error('Failed to join room:', error);
-                  Alert.alert('Error', 'Failed to join the room. Please try again.');
-                } finally {
-                  setJoiningRoom(null); // Reset joining state
-                }
-              },
-            },
-          ]
-        );
-      }
-    } catch (error) {
-      console.error('Error handling province press:', error);
-      Alert.alert('Error', 'An unexpected error occurred.');
-    }
+    
+    router.push('/new-message');
   };
 
-  const filteredProvinces: ExtendedProvince[] = selectedRegion
-    ? regions.find(r => r.id === selectedRegion.id)?.provinces as ExtendedProvince[] || []
-    : regions.flatMap(r => r.provinces) as ExtendedProvince[];
+  // Animated styles
+  const headerAnimStyle = useAnimatedStyle(() => {
+    return {
+      opacity: headerOpacity.value,
+    };
+  });
 
-  if (error) {
+  const contentAnimStyle = useAnimatedStyle(() => {
+    return {
+      opacity: contentOpacity.value,
+    };
+  });
+
+  const fabAnimStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: fabScale.value }],
+    };
+  });
+
+  useEffect(() => {
+    fetchRegions();
+    
+    // Set up real-time listeners
+    const chatroomsSubscription = supabase
+      .channel('chatrooms-changes')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'chatrooms' 
+      }, () => {
+        fetchRegions();
+      })
+      .subscribe();
+      
+    const messagesSubscription = supabase
+      .channel('messages-changes')
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'messages' 
+      }, () => {
+        fetchRegions();
+      })
+      .subscribe();
+      
+    return () => {
+      chatroomsSubscription.unsubscribe();
+      messagesSubscription.unsubscribe();
+    };
+  }, []);
+
+  const renderRegionButton = (region: Region) => {
+    const isSelected = selectedRegion?.id === region.id;
+    
     return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.errorText}>{error}</Text>
-      </View>
-    );
-  }
-
-  if (loading) {
-    return (
-      <View style={styles.centerContainer}>
-        <Text>Loading rooms...</Text>
-      </View>
-    );
-  }
-
-  const renderProvinceItem = ({ item }: { item: ExtendedProvince }) => {
-    const chatroomId = item.chatrooms?.[0]?.id;
-    const isMember = chatroomId ? membershipStatus[chatroomId] : false;
-    const isJoining = joiningRoom === chatroomId;
-    const onlineCount = Object.keys(onlineUsers).length;
-    const messageCount = chatroomId ? chatMessages[chatroomId] || 0 : 0;
-
-    return (
-      <TouchableOpacity
-        key={item.id}
-        style={[
-          styles.provinceItem,
-          { backgroundColor: colors.surface }
-        ]}
-        onPress={() => handleProvincePress(item)}
-        activeOpacity={0.7}
+      <Animated.View
+        key={region.id}
+        entering={SlideInRight.delay(200 + regions.indexOf(region) * 100).duration(400)}
       >
-        <View style={styles.provinceIconContainer}>
-          <MapPin size={24} color="#007AFF" />
-        </View>
-        <View style={styles.provinceInfo}>
-          <Text style={styles.provinceName}>{item.name}</Text>
-          <View style={styles.statsContainer}>
-            <View style={styles.stat}>
-              <MessageCircle size={16} color="#666" />
-              <Text style={styles.statText}>
-                {messageCount} chats
-              </Text>
-            </View>
-            <View style={styles.stat}>
-              <Users size={16} color="#666" />
-              <Text style={styles.statText}>{onlineCount} online</Text>
-            </View>
-          </View>
-        </View>
-        {chatroomId && (
-          <TouchableOpacity
+        <TouchableOpacity
+          style={[
+            styles.regionButton,
+            isSelected && styles.selectedRegionButton
+          ]}
+          onPress={() => handleRegionSelect(region)}
+        >
+          <Text 
             style={[
-              styles.roomButton,
-              { backgroundColor: isMember ? '#dc3545' : '#28a745' }
+              styles.regionButtonText,
+              isSelected && styles.selectedRegionButtonText
             ]}
-            disabled={isJoining}
-            onPress={() => {
-              isMember ? handleLeaveRoom(chatroomId) : handleJoinRoom(chatroomId);
-            }}
           >
-            {isJoining ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <View style={styles.buttonContent}>
-                {isMember ? (
-                  <>
-                    <LogOut size={20} color="#fff" />
-                    <Text style={styles.buttonText}>Leave</Text>
-                  </>
-                ) : (
-                  <>
-                    <LogIn size={20} color="#fff" />
-                    <Text style={styles.buttonText}>Join</Text>
-                  </>
-                )}
-              </View>
-            )}
-          </TouchableOpacity>
-        )}
-      </TouchableOpacity>
+            {region.name}
+          </Text>
+          {isSelected && (
+            <View style={styles.selectedIndicator} />
+          )}
+        </TouchableOpacity>
+      </Animated.View>
     );
   };
+
+  const renderChatroom = ({ item, index }: { item: any, index: number }) => {
+    const isJoining = joiningRoom === item.id;
+    const isMember = membershipStatus[item.id];
+    const onlineCount = onlineUsers[item.id] || 0;
+    const unreadCount = unreadMessages[item.id] || 0;
+    
+    return (
+      <Animated.View entering={FadeInUp.delay(100 * index).duration(400)}>
+        <ChatroomItem
+          id={item.id}
+          name={item.name}
+          lastMessage={item.last_message}
+          lastMessageTime={item.last_message_time}
+          unreadCount={unreadCount}
+          onPress={handleChatroomPress}
+          isActive={isMember}
+          onlineCount={onlineCount}
+        />
+      </Animated.View>
+    );
+  };
+
+  const renderEmptyState = () => (
+    <Animated.View 
+      style={styles.emptyContainer}
+      entering={FadeIn.duration(400)}
+    >
+      <Ionicons name="chatbubble-ellipses-outline" size={80} color={COLORS.textLight} />
+      <Text style={styles.emptyTitle}>No Chat Rooms</Text>
+      <Text style={styles.emptyMessage}>There are no chat rooms available in this region yet.</Text>
+      <Button
+        title="Create a Chat Room"
+        onPress={handleCreateChatroom}
+        variant="primary"
+        style={styles.createButton}
+        gradient
+      />
+    </Animated.View>
+  );
+
+  if (loading && !refreshing) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Loading chat rooms...</Text>
+      </View>
+    );
+  }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <Text style={[styles.title, { color: colors.text }]}>Chat Rooms</Text>
-        <RegionDropdown
-          regions={regions}
-          selectedRegion={selectedRegion}
-          onSelect={setSelectedRegion}
+    <View style={styles.container}>
+      <StatusBar backgroundColor={COLORS.background} />
+      
+      {/* Header */}
+      <Animated.View style={[styles.header, headerAnimStyle]}>
+        <Text style={styles.title}>Chat Rooms</Text>
+        <Text style={styles.subtitle}>Join conversations across the Philippines</Text>
+      </Animated.View>
+      
+      {/* Regions Horizontal Scroll */}
+      <Animated.View style={[styles.regionsContainer, headerAnimStyle]}>
+        <FlatList
+          data={regions}
+          renderItem={({ item }) => renderRegionButton(item)}
+          keyExtractor={item => item.id}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.regionsScrollContent}
         />
-      </View>
-
-      <FlatList<ExtendedProvince>
-        data={filteredProvinces}
-        renderItem={renderProvinceItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
-      />
-
-      <FloatingActionButton
-        onPress={() => router.push('/new-message')}
-      />
+      </Animated.View>
+      
+      {/* Chatrooms List */}
+      <Animated.View style={[styles.chatroomsContainer, contentAnimStyle]}>
+        {error ? (
+          <View style={styles.errorContainer}>
+            <Ionicons name="alert-circle-outline" size={40} color={COLORS.error} />
+            <Text style={styles.errorText}>{error}</Text>
+            <Button
+              title="Try Again"
+              onPress={fetchRegions}
+              variant="outline"
+              size="small"
+              style={styles.retryButton}
+            />
+          </View>
+        ) : (
+          <FlatList
+            data={selectedRegion?.provinces.flatMap(province => province.chatrooms || []) || []}
+            renderItem={renderChatroom}
+            keyExtractor={item => item.id}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.chatroomsScrollContent}
+            ListEmptyComponent={renderEmptyState}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                colors={[COLORS.primary]}
+                tintColor={COLORS.primary}
+              />
+            }
+          />
+        )}
+      </Animated.View>
+      
+      {/* Floating Action Button */}
+      <Animated.View style={[styles.fabContainer, fabAnimStyle]}>
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={handleCreateChatroom}
+          activeOpacity={0.8}
+        >
+          <LinearGradient
+            colors={[COLORS.gradientStart, COLORS.gradientEnd]}
+            style={styles.fabGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Ionicons name="add" size={28} color={COLORS.card} />
+          </LinearGradient>
+        </TouchableOpacity>
+      </Animated.View>
     </View>
   );
 }
@@ -384,150 +576,140 @@ export default function RoomsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: COLORS.background,
   },
-  centerContainer: {
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: COLORS.background,
+  },
+  loadingText: {
+    fontFamily: 'System',
+    fontSize: SIZES.body2,
+    fontWeight: 'normal',
+    color: COLORS.textSecondary,
+    marginTop: SIZES.spacingM,
   },
   header: {
-    padding: 16,
-    borderBottomWidth: 1,
-    paddingTop: Platform.OS === 'android' ? 30 : 16,
-    minHeight: Platform.OS === 'android' ? 80 : 60,
-    justifyContent: 'center',
+    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    paddingHorizontal: SIZES.padding,
+    paddingBottom: SIZES.spacingM,
   },
   title: {
-    fontSize: 24,
+    fontFamily: 'System',
+    fontSize: SIZES.h1,
     fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: SIZES.spacingXS,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
+    fontFamily: 'System',
+    fontSize: SIZES.body2,
+    fontWeight: 'normal',
+    color: COLORS.textSecondary,
   },
-  listContainer: {
-    padding: 16,
+  regionsContainer: {
+    marginBottom: SIZES.spacingM,
   },
-  regionContainer: {
-    marginBottom: 24,
+  regionsScrollContent: {
+    paddingHorizontal: SIZES.padding,
   },
-  regionName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
+  regionButton: {
+    paddingVertical: SIZES.spacingS,
+    paddingHorizontal: SIZES.spacingL,
+    marginRight: SIZES.spacingS,
+    borderRadius: SIZES.radiusRound,
+    backgroundColor: COLORS.card,
+    ...SHADOWS.light,
   },
-  provinceItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-    elevation: 5, // Keep elevation for Android
+  selectedRegionButton: {
+    backgroundColor: COLORS.primary,
   },
-  provinceImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    marginRight: 12,
+  regionButtonText: {
+    fontFamily: 'System',
+    fontSize: SIZES.body3,
+    fontWeight: 'bold',
+    color: COLORS.textSecondary,
   },
-  provinceIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#f0f8ff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
+  selectedRegionButtonText: {
+    color: COLORS.card,
   },
-  provinceInfo: {
+  selectedIndicator: {
+    position: 'absolute',
+    bottom: -4,
+    left: '50%',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.primary,
+    marginLeft: -4,
+  },
+  chatroomsContainer: {
     flex: 1,
   },
-  provinceName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+  chatroomsScrollContent: {
+    paddingBottom: 100, // Space for FAB
   },
-  chatCount: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    marginTop: 4,
-  },
-  stat: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 16
-  },
-  statText: {
-    fontSize: 12,
-    color: '#666',
-    marginLeft: 4,
-  },
-  unreadBadge: {
-    backgroundColor: '#007AFF',
-    minWidth: 24,
-    height: 24,
-    borderRadius: 12,
+  emptyContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 4,
+    padding: SIZES.padding,
+    marginTop: SIZES.spacing2XL,
   },
-  unreadText: {
-    color: '#fff',
-    fontSize: 12,
+  emptyTitle: {
+    fontFamily: 'System',
+    fontSize: SIZES.h3,
     fontWeight: 'bold',
+    color: COLORS.text,
+    marginTop: SIZES.spacingM,
+    marginBottom: SIZES.spacingS,
+  },
+  emptyMessage: {
+    fontFamily: 'System',
+    fontSize: SIZES.body2,
+    fontWeight: 'normal',
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: SIZES.spacingL,
+  },
+  createButton: {
+    marginTop: SIZES.spacingM,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SIZES.padding,
   },
   errorText: {
-    color: '#ff3b30',
+    fontFamily: 'System',
+    fontSize: SIZES.body2,
+    fontWeight: 'normal',
+    color: COLORS.error,
     textAlign: 'center',
+    marginVertical: SIZES.spacingM,
   },
-  roomButton: {
-    minWidth: 80,
-    height: 40,
-    borderRadius: 20,
+  retryButton: {
+    marginTop: SIZES.spacingM,
+  },
+  fabContainer: {
+    position: 'absolute',
+    right: SIZES.padding,
+    bottom: SIZES.padding,
+  },
+  fab: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    overflow: 'hidden',
+    ...SHADOWS.dark,
+  },
+  fabGradient: {
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 8,
-    paddingHorizontal: 16,
-  },
-  buttonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonText: {
-    color: '#fff',
-    marginLeft: 4,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  roomDescription: {
-    fontSize: 12,
-    marginTop: 4,
-    opacity: 0.7,
-  },
-  roomMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  badge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  badgeText: {
-    color: 'white',
-    fontSize: 12,
   },
 });

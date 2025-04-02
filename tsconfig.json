@@ -1,11 +1,35 @@
 {
   "compilerOptions": {
+    "target": "es2016",
+    "jsx": "react-jsx",
+    "module": "commonjs",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
     "strict": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@/theme": [
+        "./src/theme"
+      ],
+      "@/theme/*": [
+        "./src/theme/*"
+      ],
+      "@/components/*": [
+        "./src/components/*"
+      ],
+      "@/assets/*": [
+        "./src/assets/*"
       ]
     },
+    "lib": [
+      "es2016",
+      "dom",
+      "esnext"
+    ],
     "typeRoots": [
       "./node_modules/@types",
       "./types"

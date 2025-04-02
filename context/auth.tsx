@@ -1,14 +1,17 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, fetchUserRole } from '@/lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { useRouter, useSegments } from 'expo-router';
+import { Alert } from 'react-native';
 
 interface AuthContextType {
   session: Session | null;
-  userRole: string | undefined; // Add a separate state for user role
+  userRole: string | undefined;
   loading: boolean;
   signOut: () => Promise<void>;
   completeOnboarding: () => Promise<void>;
+  authError: string | null;
+  clearAuthError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -17,44 +20,66 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   signOut: async () => {},
   completeOnboarding: async () => {},
+  authError: null,
+  clearAuthError: () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
-  const [userRole, setUserRole] = useState<string | undefined>(undefined); // Separate state for role
+  const [userRole, setUserRole] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   const segments = useSegments();
   const router = useRouter();
 
+  const clearAuthError = () => setAuthError(null);
+
   useEffect(() => {
     const fetchSession = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error) {
-        console.error('Session check error:', error);
-        return;
-      }
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) {
+          setAuthError(`Session check error: ${error.message}`);
+          return;
+        }
 
-      if (session) {
-        setSession(session);
-        const role = await fetchUserRole(session.user.id);
-        setUserRole(role || undefined); // Handle null by setting undefined
+        if (session) {
+          setSession(session);
+          try {
+            const role = await fetchUserRole(session.user.id);
+            setUserRole(role || undefined);
+          } catch (roleError) {
+            setAuthError(`Failed to fetch user role: ${roleError instanceof Error ? roleError.message : 'Unknown error'}`);
+          }
+        }
+      } catch (e) {
+        setAuthError(`Unexpected error: ${e instanceof Error ? e.message : 'Unknown error'}`);
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     };
 
     fetchSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session) {
-        setSession(session);
-        const role = await fetchUserRole(session.user.id);
-        setUserRole(role || undefined); // Handle null by setting undefined
-      } else {
-        setSession(null);
-        setUserRole(undefined);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: Session | null) => {
+      try {
+        if (session) {
+          setSession(session);
+          try {
+            const role = await fetchUserRole(session.user.id);
+            setUserRole(role || undefined);
+          } catch (roleError) {
+            setAuthError(`Failed to fetch user role: ${roleError instanceof Error ? roleError.message : 'Unknown error'}`);
+          }
+        } else {
+          setSession(null);
+          setUserRole(undefined);
+        }
+      } catch (e) {
+        setAuthError(`Auth state change error: ${e instanceof Error ? e.message : 'Unknown error'}`);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
 
       if (!session) {
         router.replace('/sign-in');
@@ -69,7 +94,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return;
 
-    const isAuthScreen = ['sign-in', 'sign-up'].includes(segments[segments.length - 1] || '');
+    const lastSegment = segments[segments.length - 1] || '';
+    const isAuthScreen = ['sign-in', 'sign-up'].includes(lastSegment);
 
     if (!session && !isAuthScreen) {
       router.replace('/sign-in');
@@ -83,7 +109,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await supabase.auth.signOut();
       router.replace('/sign-in');
     } catch (error) {
-      console.error('Error signing out:', error);
+      const errorMessage = `Error signing out: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      setAuthError(errorMessage);
+      Alert.alert('Sign Out Error', errorMessage);
     }
   };
 
@@ -97,7 +125,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error;
       router.replace('/');
     } catch (error) {
-      console.error('Error completing onboarding:', error);
+      const errorMessage = `Error completing onboarding: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      setAuthError(errorMessage);
+      Alert.alert('Onboarding Error', errorMessage);
       throw error;
     }
   };
@@ -107,7 +137,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, userRole, loading, signOut, completeOnboarding }}>
+    <AuthContext.Provider value={{ 
+      session, 
+      userRole, 
+      loading, 
+      signOut, 
+      completeOnboarding,
+      authError,
+      clearAuthError
+    }}>
       {children}
     </AuthContext.Provider>
   );

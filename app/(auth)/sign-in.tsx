@@ -1,412 +1,358 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, ActivityIndicator, Animated, Image, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Platform, ActivityIndicator, Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, Image, Dimensions } from 'react-native';
 import { Link, router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { Mail, Lock } from 'lucide-react-native';
-import { useToast } from '@/context/toast';
-import { useTheme } from '@/context/theme';
+import { Ionicons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
+import { COLORS, SIZES, SHADOWS } from '@/theme';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSequence,
+  withDelay,
+  Easing,
+  FadeIn,
+  FadeInDown,
+  SlideInDown,
+} from 'react-native-reanimated';
 
-const useDynamicStyles = (colors: any) =>
-  StyleSheet.create({
-    inputContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.inputBackground,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: colors.border, // Adjust border color dynamically
-      marginBottom: 16,
-      padding: Platform.OS === 'ios' ? 12 : 4,
-    },
-    inputIcon: {
-      marginRight: 8,
-      marginLeft: 8,
-      color: colors.text, // Adjust icon color dynamically
-    },
-    input: {
-      flex: 1,
-      fontSize: 16,
-      borderRadius: 8,
-      padding: Platform.OS === 'ios' ? 12 : 8,
-      color: colors.text, // Adjust text color dynamically
-      transform: [{ scale: 1 }],
-    },
-    container: {
-      flex: 1,
-      justifyContent: 'center', // Center content vertically
-      alignItems: 'center', // Center content horizontally
-      paddingHorizontal: 20, // Add horizontal padding
-      paddingBottom: 40, // Add padding to ensure content is visible
-      backgroundColor: colors.background, // Ensure background color matches theme
-    },
-    logoContainer: {
-      flexDirection: 'row',
-      marginBottom: 40,
-    },
-    logoImage: {
-      width: 450, // Further increased width
-      height: 180, // Further increased height
-    },
-    formContainer: {
-      width: '100%',
-      maxWidth: 400, // Limit the width for better readability
-      padding: 20,
-      borderRadius: 8,
-      backgroundColor: colors.surface,
-      boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.1)',
-      elevation: 8,
-      transform: [{ scale: 1 }],
-    },
-    title: {
-      fontSize: 24,
-      fontWeight: 'bold',
-      marginBottom: 8,
-      textAlign: 'center',
-    },
-    subtitle: {
-      fontSize: 16,
-      marginBottom: 24,
-      textAlign: 'center',
-    },
-    button: {
-      backgroundColor: '#28A745', // Match button color
-      padding: 16,
-      borderRadius: 8,
-      alignItems: 'center',
-      marginTop: 8,
-      transform: [{ scale: 1 }],
-    },
-    buttonDisabled: {
-      backgroundColor: '#ccc',
-    },
-    buttonText: {
-      color: '#fff',
-      fontSize: 16,
-      fontWeight: '600',
-    },
-    footer: {
-      marginTop: 20, // Add spacing between form and footer
-      alignItems: 'center',
-      flexDirection: 'row',
-      justifyContent: 'center', // Center align the text
-    },
-    footerText: {
-      color: '#666',
-      textAlign: 'center', // Ensure text is centered
-    },
-    link: {
-      marginTop: 0, // Remove extra margin
-    },
-    linkText: {
-      color: '#28A745', // Match button color
-      fontWeight: '600',
-      textAlign: 'center', // Ensure text is centered
-    },
-    error: {
-      color: '#ff3b30',
-      marginBottom: 16,
-      textAlign: 'center',
-    },
-    progressBarContainer: {
-      height: 60, // Increased height for progress bar and label
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginVertical: 20,
-    },
-    stepLabel: {
-      fontSize: 16,
-      fontWeight: '600',
-      fontFamily: 'Poppins-Bold', // Updated font family
-      color: '#28A745', // Match button color
-      marginBottom: 10,
-    },
-    progressBarBackground: {
-      width: '80%',
-      height: 8,
-      backgroundColor: '#ddd',
-      borderRadius: 4,
-      overflow: 'hidden',
-    },
-    progressBarFill: {
-      height: '100%',
-      backgroundColor: '#28A745', // Match button color
-      borderRadius: 4,
-      boxShadow: '0px 0px 8px rgba(40, 167, 69, 0.3)',
-    },
-    forgotPasswordButton: {
-      alignSelf: 'flex-end',
-      marginBottom: 20,
-    },
-    forgotPasswordText: {
-      color: '#007AFF',
-      fontSize: 14,
-    },
-  });
+// Import our UI components
+import Button from '@/src/components/ui/Button';
+import Input from '@/src/components/ui/Input';
+import Card from '@/src/components/ui/Card';
+import AuthBackground from '@/src/components/ui/AuthBackground';
+
+const { width } = Dimensions.get('window');
 
 export default function SignIn() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isResettingPassword, setIsResettingPassword] = useState(false);
-  const animatedValues = useRef([...Array(5)].map(() => new Animated.Value(0))).current; // 5 letters in "Uzzap"
-  const { showToast } = useToast();
-  const { colors } = useTheme();
-  const fadeAnim = useRef(new Animated.Value(0)).current; // Animation value for fading
-  const [currentStep, setCurrentStep] = useState(0); // Track the current step
-  const progressAnim = useRef(new Animated.Value(0)).current; // Animation value for progress bar
-  const scaleAnim = useRef(new Animated.Value(0.95)).current;
-  const styles = useDynamicStyles(colors);
+  const [showPassword, setShowPassword] = useState(false);
 
-  const steps = ['Connecting', 'Authenticating', 'Initializing'];
+  // Animation values
+  const formOpacity = useSharedValue(0);
+  const formTranslateY = useSharedValue(50);
+  const logoScale = useSharedValue(0.8);
+  const errorShake = useSharedValue(0);
 
-  useEffect(() => {
-    Animated.stagger(100, animatedValues.map(anim =>
-      Animated.timing(anim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      })
-    )).start();
-  }, [animatedValues, fadeAnim, progressAnim, steps.length]); // Added missing dependencies
-
-  useEffect(() => {
-    const animateSteps = async () => {
-      for (let i = 0; i < steps.length; i++) {
-        setCurrentStep(i);
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }).start();
-
-        Animated.timing(progressAnim, {
-          toValue: (i + 1) / steps.length,
-          duration: 1000,
-          useNativeDriver: false,
-        }).start();
-
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 500,
-          useNativeDriver: true,
-        }).start();
-      }
-    };
-
-    animateSteps();
-  }, [fadeAnim, progressAnim, steps.length]); // Added missing dependencies
-
-  useEffect(() => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      tension: 40,
-      friction: 8,
-      useNativeDriver: true,
-    }).start();
+  // Start animations
+  React.useEffect(() => {
+    logoScale.value = withTiming(1, { duration: 800, easing: Easing.elastic(1.2) });
+    formOpacity.value = withDelay(400, withTiming(1, { duration: 800 }));
+    formTranslateY.value = withDelay(400, withTiming(0, { duration: 800, easing: Easing.out(Easing.cubic) }));
   }, []);
 
-  const handlePressIn = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.97,
-      tension: 40,
-      friction: 3,
-      useNativeDriver: true,
-    }).start();
-  };
+  // Animated styles
+  const logoAnimStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: logoScale.value }],
+    };
+  });
 
-  const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      tension: 40,
-      friction: 3,
-      useNativeDriver: true,
-    }).start();
-  };
+  const formAnimStyle = useAnimatedStyle(() => {
+    return {
+      opacity: formOpacity.value,
+      transform: [{ translateY: formTranslateY.value }],
+    };
+  });
 
-  const renderLogo = () => (
-    <View style={styles.logoContainer}>
-      <Image
-        source={require('../../assets/uzzap-logo.png')}
-        style={styles.logoImage}
-        resizeMode="contain"
-      />
-    </View>
-  );
-
-  const renderProgressBar = () => (
-    <View style={styles.progressBarContainer}>
-      <Animated.Text
-        style={[
-          styles.stepLabel,
-          { opacity: fadeAnim }, // Bind opacity to animation
-        ]}
-      >
-        {steps[currentStep]}
-      </Animated.Text>
-      <View style={styles.progressBarBackground}>
-        <Animated.View
-          style={[
-            styles.progressBarFill,
-            {
-              width: progressAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: ['0%', '100%'],
-              }),
-            },
-          ]}
-        />
-      </View>
-    </View>
-  );
+  const errorAnimStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateX: errorShake.value }],
+    };
+  });
 
   const handleSignIn = async () => {
+    if (!email || !password) {
+      setError('Please enter both email and password');
+      // Animate error shake
+      errorShake.value = withSequence(
+        withTiming(-10, { duration: 100 }),
+        withTiming(10, { duration: 100 }),
+        withTiming(-10, { duration: 100 }),
+        withTiming(0, { duration: 100 })
+      );
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
+      
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-      // Start login process in parallel with animations
-      const loginPromise = (async () => {
-        // Simulate "Connecting"
-        await new Promise(resolve => setTimeout(resolve, 1500));
-
-        // Simulate "Authenticating"
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
-
-        // Simulate "Initializing"
-        await new Promise(resolve => setTimeout(resolve, 1500));
-      })();
-
-      // Wait for login to complete
-      await loginPromise;
-
-      // Navigate to the next page after login completes
-      router.replace('/');
-      showToast('Successfully signed in', 'success');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'An unknown error occurred';
-      showToast(message, 'error');
-      setError(message);
+      if (error) throw error;
+      
+      // Successfully signed in
+      router.replace('/(tabs)');
+    } catch (error: any) {
+      setError(error.message || 'An error occurred during sign in');
+      // Animate error shake
+      errorShake.value = withSequence(
+        withTiming(-10, { duration: 100 }),
+        withTiming(10, { duration: 100 }),
+        withTiming(-10, { duration: 100 }),
+        withTiming(0, { duration: 100 })
+      );
     } finally {
       setLoading(false);
     }
   };
 
   const handleForgotPassword = async () => {
-    try {
-      if (!email) {
-        throw new Error('Please enter your email address');
-      }
+    if (!email) {
+      setError('Please enter your email to reset password');
+      // Animate error shake
+      errorShake.value = withSequence(
+        withTiming(-10, { duration: 100 }),
+        withTiming(10, { duration: 100 }),
+        withTiming(-10, { duration: 100 }),
+        withTiming(0, { duration: 100 })
+      );
+      return;
+    }
 
+    try {
       setLoading(true);
+      setError(null);
+      
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'myapp://reset-password',
+        redirectTo: 'buzzap-messenger://reset-password',
       });
 
       if (error) throw error;
-
-      Alert.alert(
-        'Password Reset',
-        'If an account exists for this email, you will receive password reset instructions.'
+      
+      // Show success message
+      setError('Password reset email sent. Please check your inbox.');
+    } catch (error: any) {
+      setError(error.message || 'Failed to send reset password email');
+      // Animate error shake
+      errorShake.value = withSequence(
+        withTiming(-10, { duration: 100 }),
+        withTiming(10, { duration: 100 }),
+        withTiming(-10, { duration: 100 }),
+        withTiming(0, { duration: 100 })
       );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'An unknown error occurred';
-      showToast(message, 'error');
-      setError(message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Animated.View 
-      style={[
-        styles.container, 
-        { backgroundColor: colors.background },
-        { transform: [{ scale: scaleAnim }] }
-      ]}
-    >
-      {renderLogo()}
-      {renderProgressBar()}
-      <View style={[styles.formContainer, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.title, { color: colors.text }]}>Welcome Back</Text>
-        <Text style={[styles.subtitle, { color: colors.gray }]}>Sign in to continue chatting</Text>
-
-        {error && (
-          <Text style={styles.error}>{error}</Text>
-        )}
-
-        <View style={[styles.inputContainer, { borderColor: colors.border }]}>
-          <Mail size={20} color={colors.text} style={styles.inputIcon} />
-          <TextInput
-            style={[
-              styles.input,
-              { backgroundColor: colors.inputBackground, color: colors.text },
-            ]}
-            placeholder="Email"
-            placeholderTextColor={colors.gray}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-        </View>
-
-        <View style={[styles.inputContainer, { borderColor: colors.border }]}>
-          <Lock size={20} color={colors.text} style={styles.inputIcon} />
-          <TextInput
-            style={[
-              styles.input,
-              { backgroundColor: colors.inputBackground, color: colors.text },
-            ]}
-            placeholder="Password"
-            placeholderTextColor={colors.gray}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
-        </View>
-
-        <TouchableOpacity
-          style={styles.forgotPasswordButton}
-          onPress={handleForgotPassword}
-          disabled={loading}
+    <AuthBackground>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.container}
         >
-          <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleSignIn}
-          disabled={loading}
-          onPressIn={handlePressIn}
-          onPressOut={handlePressOut}
-        >
-          {loading ? (
-            <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-              <ActivityIndicator color="#fff" />
-            </Animated.View>
-          ) : (
-            <Text style={styles.buttonText}>Sign In</Text>
-          )}
-        </TouchableOpacity>
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Don't have an account? </Text>
-          <Link href="/sign-up" style={styles.link}>
-            <Text style={styles.linkText}>Sign Up</Text>
-          </Link>
-        </View>
-      </View>
-    </Animated.View>
+          <StatusBar style="dark" />
+          
+          {/* Logo */}
+          <Animated.View 
+            style={[styles.logoContainer, logoAnimStyle]}
+            entering={FadeIn.duration(800).delay(200)}
+          >
+            <Image
+              source={require('../../assets/uzzap-logo.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </Animated.View>
+          
+          {/* Form */}
+          <Animated.View 
+            style={[styles.formContainer, formAnimStyle]}
+            entering={FadeInDown.duration(800).delay(400).springify()}
+          >
+            <Card style={styles.card}>
+              <Animated.Text 
+                style={styles.title}
+                entering={SlideInDown.duration(600).delay(600)}
+              >
+                Welcome Back
+              </Animated.Text>
+              
+              <Animated.Text 
+                style={styles.subtitle}
+                entering={SlideInDown.duration(600).delay(700)}
+              >
+                Sign in to continue
+              </Animated.Text>
+              
+              {/* Error message */}
+              {error && (
+                <Animated.View 
+                  style={[styles.errorContainer, errorAnimStyle]}
+                  entering={FadeIn.duration(300)}
+                >
+                  <Text style={styles.errorText}>{error}</Text>
+                </Animated.View>
+              )}
+              
+              {/* Email input */}
+              <Animated.View entering={FadeInDown.duration(600).delay(800)}>
+                <Input
+                  label="Email"
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="Enter your email"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  leftIcon={<Ionicons name="mail-outline" size={20} color={COLORS.textSecondary} />}
+                  error={error && !email ? 'Email is required' : undefined}
+                />
+              </Animated.View>
+              
+              {/* Password input */}
+              <Animated.View entering={FadeInDown.duration(600).delay(900)}>
+                <Input
+                  label="Password"
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Enter your password"
+                  secureTextEntry={!showPassword}
+                  leftIcon={<Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} />}
+                  rightIcon={
+                    <Ionicons
+                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={20}
+                      color={COLORS.textSecondary}
+                    />
+                  }
+                  onRightIconPress={() => setShowPassword(!showPassword)}
+                  error={error && !password ? 'Password is required' : undefined}
+                />
+              </Animated.View>
+              
+              {/* Forgot Password */}
+              <Animated.View 
+                style={styles.forgotPasswordContainer}
+                entering={FadeInDown.duration(600).delay(1000)}
+              >
+                <TouchableWithoutFeedback onPress={handleForgotPassword}>
+                  <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+                </TouchableWithoutFeedback>
+              </Animated.View>
+              
+              {/* Sign In Button */}
+              <Animated.View entering={FadeInDown.duration(600).delay(1100)}>
+                <Button
+                  title="Sign In"
+                  onPress={handleSignIn}
+                  loading={loading}
+                  gradient={true}
+                  fullWidth
+                  style={styles.signInButton}
+                />
+              </Animated.View>
+              
+              {/* Sign Up Link */}
+              <Animated.View 
+                style={styles.signUpContainer}
+                entering={FadeInDown.duration(600).delay(1200)}
+              >
+                <Text style={styles.signUpText}>Don't have an account? </Text>
+                <Link href="/sign-up" asChild>
+                  <Text style={styles.signUpLink}>Sign Up</Text>
+                </Link>
+              </Animated.View>
+            </Card>
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </TouchableWithoutFeedback>
+    </AuthBackground>
   );
 }
 
-export const screenOptions = {
-  headerShown: false, // Ensure the header is hidden
-};
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SIZES.padding,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: SIZES.spacing2XL,
+  },
+  logoImage: {
+    width: width * 0.4,
+    height: width * 0.4,
+  },
+  formContainer: {
+    width: '100%',
+    maxWidth: 400,
+  },
+  card: {
+    padding: SIZES.spacingL,
+    borderRadius: SIZES.radiusLarge,
+    ...SHADOWS.medium,
+  },
+  title: {
+    fontFamily: 'System',
+    fontSize: SIZES.h2,
+    fontWeight: '700',
+    color: COLORS.text,
+    textAlign: 'center',
+    marginBottom: SIZES.spacingXS,
+  },
+  subtitle: {
+    fontFamily: 'System',
+    fontSize: SIZES.body2,
+    fontWeight: '400',
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: SIZES.spacingL,
+  },
+  errorContainer: {
+    backgroundColor: COLORS.error + '15', // 15% opacity
+    padding: SIZES.spacingM,
+    borderRadius: SIZES.radiusMedium,
+    marginBottom: SIZES.spacingM,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.error,
+  },
+  errorText: {
+    fontFamily: 'System',
+    fontSize: SIZES.body3,
+    fontWeight: '400',
+    color: COLORS.error,
+  },
+  forgotPasswordContainer: {
+    alignItems: 'flex-end',
+    marginTop: SIZES.spacingXS,
+    marginBottom: SIZES.spacingL,
+  },
+  forgotPasswordText: {
+    fontFamily: 'System',
+    fontSize: SIZES.body3,
+    fontWeight: '400',
+    color: COLORS.primary,
+  },
+  signInButton: {
+    marginBottom: SIZES.spacingL,
+  },
+  signUpContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  signUpText: {
+    fontFamily: 'System',
+    fontSize: SIZES.body3,
+    fontWeight: '400',
+    color: COLORS.textSecondary,
+  },
+  signUpLink: {
+    fontFamily: 'System',
+    fontSize: SIZES.body3,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+});

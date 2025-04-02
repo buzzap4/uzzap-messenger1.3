@@ -13,11 +13,15 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
 // Rate limiting
-const messageRateLimit = new Map<string, number>();
-const RATE_LIMIT_WINDOW = 60000; // 1 minuteminute
+const RATE_LIMIT_WINDOW = 60000; // 1 minute
 const MAX_MESSAGES = 30; // 30 messages per minute
-// Add proper rate limiting with database storage
-export const checkRateLimit = async (userId: string): Promise<boolean> => {
+
+// Improved rate limiting with better error handling
+export const checkRateLimit = async (userId: string): Promise<{ allowed: boolean; message?: string }> => {
+  if (!userId) {
+    return { allowed: false, message: 'User ID is required for rate limiting' };
+  }
+
   try {
     const { data, error } = await supabase
       .from('rate_limits')
@@ -26,44 +30,70 @@ export const checkRateLimit = async (userId: string): Promise<boolean> => {
       .eq('type', 'message')
       .single();
 
-    if (error) throw error;
+    if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
+      throw error;
+    }
 
     if (!data) {
       // Create new rate limit record
-      await supabase.from('rate_limits').insert({
+      const { error: insertError } = await supabase.from('rate_limits').insert({
         user_id: userId,
         type: 'message',
         count: 1,
         reset_at: new Date(Date.now() + RATE_LIMIT_WINDOW)
       });
-      return true;
+
+      if (insertError) {
+        throw insertError;
+      }
+      
+      return { allowed: true };
     }
 
     if (new Date(data.reset_at) < new Date()) {
       // Reset expired rate limit
-      await supabase.from('rate_limits').upsert({
+      const { error: updateError } = await supabase.from('rate_limits').upsert({
         user_id: userId,
         type: 'message',
         count: 1,
         reset_at: new Date(Date.now() + RATE_LIMIT_WINDOW)
       });
-      return true;
+
+      if (updateError) {
+        throw updateError;
+      }
+      
+      return { allowed: true };
     }
 
     if (data.count >= MAX_MESSAGES) {
-      return false;
+      const resetTime = new Date(data.reset_at);
+      const timeLeft = Math.ceil((resetTime.getTime() - Date.now()) / 1000);
+      return { 
+        allowed: false, 
+        message: `Rate limit exceeded. Please try again in ${timeLeft} seconds.` 
+      };
     }
 
     // Increment count
-    await supabase.from('rate_limits')
+    const { error: incrementError } = await supabase.from('rate_limits')
       .update({ count: data.count + 1 })
       .eq('user_id', userId)
       .eq('type', 'message');
 
-    return true;
+    if (incrementError) {
+      throw incrementError;
+    }
+
+    return { allowed: true };
   } catch (error) {
     console.error('Rate limit check failed:', error);
-    return false;
+    // Fail open - allow the message if we can't check the rate limit
+    // This is a security decision - in production you might want to fail closed instead
+    return { 
+      allowed: true, 
+      message: 'Rate limit check failed, but message allowed as fallback' 
+    };
   }
 };
 
@@ -189,5 +219,65 @@ export const refreshSession = async () => {
   } catch (error) {
     console.error('Session refresh failed:', error);
     throw error;
+  }
+};
+
+// Add session timeout management
+export const SESSION_TIMEOUT = 60 * 60 * 1000; // 1 hour in milliseconds
+
+export const setupSessionTimeout = (onTimeout: () => void) => {
+  let timeoutId: ReturnType<typeof setTimeout>;
+  
+  const resetTimeout = () => {
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = setTimeout(onTimeout, SESSION_TIMEOUT);
+  };
+  
+  // Set up activity listeners
+  const setupActivityListeners = () => {
+    if (typeof window !== 'undefined') {
+      ['mousedown', 'keypress', 'scroll', 'touchstart'].forEach(event => {
+        window.addEventListener(event, resetTimeout);
+      });
+    }
+  };
+  
+  // Clean up function
+  const cleanup = () => {
+    if (timeoutId) clearTimeout(timeoutId);
+    if (typeof window !== 'undefined') {
+      ['mousedown', 'keypress', 'scroll', 'touchstart'].forEach(event => {
+        window.removeEventListener(event, resetTimeout);
+      });
+    }
+  };
+  
+  // Initialize
+  resetTimeout();
+  setupActivityListeners();
+  
+  return cleanup;
+};
+
+// Secure token storage
+export const secureTokenStorage = {
+  async getAccessToken(): Promise<string | null> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      return session?.access_token || null;
+    } catch (error) {
+      console.error('Error getting access token:', error);
+      return null;
+    }
+  },
+  
+  async getRefreshToken(): Promise<string | null> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      return session?.refresh_token || null;
+    } catch (error) {
+      console.error('Error getting refresh token:', error);
+      return null;
+    }
   }
 };

@@ -22,6 +22,7 @@ export interface DatabaseMessage {
   chatroom_id: string;
   is_edited: boolean;
   is_deleted: boolean;
+  bubble_color?: string;
   user?: Profile;
 }
 
