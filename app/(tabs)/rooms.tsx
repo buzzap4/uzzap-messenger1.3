@@ -257,7 +257,7 @@ export default function RoomsScreen() {
       const statuses: { [key: string]: boolean } = {};
       
       for (const chatroomId of chatroomIds) {
-        const isMember = await isUserInChatroom(chatroomId, session.user.id);
+        const { data: isMember } = await isUserInChatroom(chatroomId, session.user.id);
         statuses[chatroomId] = isMember;
       }
       
@@ -275,8 +275,7 @@ export default function RoomsScreen() {
         .from('chatroom_members')
         .select('chatroom_id, count')
         .in('chatroom_id', chatroomIds)
-        .eq('is_online', true)
-        .group('chatroom_id');
+        .eq('is_online', true);
       
       if (error) {
         console.error('Error fetching online users:', error);
@@ -285,7 +284,7 @@ export default function RoomsScreen() {
       
       const onlineUsersCount: { [key: string]: number } = {};
       
-      data?.forEach(item => {
+      data?.forEach((item: { chatroom_id: string; count: number }) => {
         onlineUsersCount[item.chatroom_id] = item.count || 0;
       });
       
@@ -303,8 +302,7 @@ export default function RoomsScreen() {
         .from('unread_messages')
         .select('chatroom_id, count')
         .in('chatroom_id', chatroomIds)
-        .eq('user_id', session.user.id)
-        .group('chatroom_id');
+        .eq('user_id', session.user.id);
       
       if (error) {
         console.error('Error fetching unread messages:', error);
@@ -313,7 +311,7 @@ export default function RoomsScreen() {
       
       const unreadCount: { [key: string]: number } = {};
       
-      data?.forEach(item => {
+      data?.forEach((item: { chatroom_id: string; count: number }) => {
         unreadCount[item.chatroom_id] = item.count || 0;
       });
       
@@ -343,7 +341,7 @@ export default function RoomsScreen() {
       
       if (!isMember) {
         setJoiningRoom(chatroomId);
-        await joinChatroom(chatroomId, session.user.id);
+        await joinChatroom(chatroomId);
         setMembershipStatus(prev => ({ ...prev, [chatroomId]: true }));
         setJoiningRoom(null);
       }
