@@ -4,12 +4,12 @@ import { GiftedChat, IMessage, Send, Bubble, InputToolbar, Actions, Composer } f
 import { MaterialIcons } from '@expo/vector-icons';
 import EmojiSelector from 'react-native-emoji-selector';
 import { useLocalSearchParams } from 'expo-router';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/auth';
-import { useTheme } from '@/context/theme';
-import { sendPushNotification } from '@/src/services/notificationService';
-import { DirectMessage } from '@/src/types/models';
-import { ChatMessage } from '@/src/types/chat';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../context/auth';
+import { useTheme } from '../../context/theme';
+import { sendPushNotification } from '../../src/services/notificationService';
+import { DirectMessage } from '../../src/types/models';
+import { ChatMessage } from '../../src/types/chat';
 
 export default function DirectMessageScreen() {
   const { id } = useLocalSearchParams();
@@ -314,6 +314,8 @@ export default function DirectMessageScreen() {
       ))}
     </View>
   );
+
+  // We already have an onSend function defined above
 
   return (
     <KeyboardAvoidingView

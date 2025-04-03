@@ -9,7 +9,7 @@ import Animated, {
   Easing,
   withDelay,
 } from 'react-native-reanimated';
-import LinearGradient from 'react-native-linear-gradient';
+// Using View instead of LinearGradient to fix the bubblingEventTypes error
 
 const { width, height } = Dimensions.get('window');
 
@@ -121,37 +121,19 @@ const AuthBackground: React.FC<AuthBackgroundProps> = ({ children }) => {
   return (
     <View style={styles.container}>
       {/* Background gradient */}
-      <LinearGradient
-        colors={[COLORS.background, COLORS.background]}
-        style={styles.gradient}
-      />
+      <View style={[styles.gradient, { backgroundColor: COLORS.background }]} />
 
       {/* Animated blobs */}
       <Animated.View style={[styles.blob, styles.blob1, blob1Style]}>
-        <LinearGradient
-          colors={[COLORS.primaryLight, COLORS.primary]}
-          style={styles.blobGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        />
+        <View style={[styles.blobGradient, { backgroundColor: COLORS.primary }]} />
       </Animated.View>
 
       <Animated.View style={[styles.blob, styles.blob2, blob2Style]}>
-        <LinearGradient
-          colors={[COLORS.secondaryLight, COLORS.secondary]}
-          style={styles.blobGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        />
+        <View style={[styles.blobGradient, { backgroundColor: COLORS.secondary }]} />
       </Animated.View>
 
       <Animated.View style={[styles.blob, styles.blob3, blob3Style]}>
-        <LinearGradient
-          colors={[COLORS.accentLight, COLORS.accent]}
-          style={styles.blobGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        />
+        <View style={[styles.blobGradient, { backgroundColor: COLORS.accent }]} />
       </Animated.View>
 
       {/* Content overlay */}
