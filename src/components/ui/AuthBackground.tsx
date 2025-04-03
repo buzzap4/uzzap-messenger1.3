@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
-import { COLORS } from '@/theme';
+import { COLORS } from '../../theme';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,

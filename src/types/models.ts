@@ -47,6 +47,8 @@ export interface Message {
   is_edited: boolean;
   is_deleted: boolean;
   bubble_color?: string;
+  emoticon_id?: string;
+  emoticon_source?: any;
   user?: User;
 }
 

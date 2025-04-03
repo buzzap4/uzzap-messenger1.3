@@ -9,12 +9,14 @@ import {
   KeyboardAvoidingView,
   Animated,
   Easing,
+  Image
 } from 'react-native';
-import { COLORS, FONTS, SIZES, SHADOWS } from '@/theme';
+import { COLORS, FONTS, SIZES, SHADOWS } from '../../theme';
 import { Ionicons } from '@expo/vector-icons';
+import EmojiModal from './EmojiModal';
 
 interface ChatInputProps {
-  onSend: (message: string) => void;
+  onSend: (message: string, emoticon?: { id: string, source: any }) => void;
   onTyping?: () => void;
   placeholder?: string;
   disabled?: boolean;
@@ -29,6 +31,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
   loading = false,
 }) => {
   const [message, setMessage] = useState('');
+  const [isEmojiModalVisible, setIsEmojiModalVisible] = useState(false);
+  const [selectedEmoticon, setSelectedEmoticon] = useState<{ id: string, source: any } | null>(null);
   const inputRef = useRef<TextInput>(null);
   const sendButtonScale = useRef(new Animated.Value(1)).current;
   const typingTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -45,9 +49,16 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   // Handle sending message
   const handleSend = () => {
-    if (message.trim() === '' || disabled || loading) return;
+    if ((message.trim() === '' && !selectedEmoticon) || disabled || loading) return;
     
-    onSend(message.trim());
+    // Send message with emoticon if selected
+    if (selectedEmoticon) {
+      onSend(message.trim(), selectedEmoticon);
+      setSelectedEmoticon(null);
+    } else {
+      onSend(message.trim());
+    }
+    
     setMessage('');
     
     // Animate send button
@@ -94,7 +105,13 @@ const ChatInput: React.FC<ChatInputProps> = ({
   }, []);
 
   // Determine if send button should be enabled
-  const isSendEnabled = message.trim() !== '' && !disabled && !loading;
+  const isSendEnabled = (message.trim() !== '' || selectedEmoticon !== null) && !disabled && !loading;
+  
+  // Handle emoticon selection
+  const handleEmoticonSelect = (emoticonId: string, emoticonSource: any) => {
+    setSelectedEmoticon({ id: emoticonId, source: emoticonSource });
+    Keyboard.dismiss();
+  };
 
   return (
     <KeyboardAvoidingView
@@ -106,28 +123,46 @@ const ChatInput: React.FC<ChatInputProps> = ({
           <TouchableOpacity
             style={styles.iconButton}
             onPress={() => {
-              // Add emoji picker functionality here
+              Keyboard.dismiss();
+              setIsEmojiModalVisible(true);
             }}
           >
             <Ionicons name="happy-outline" size={24} color={COLORS.textSecondary} />
           </TouchableOpacity>
 
-          <TextInput
-            ref={inputRef}
-            style={styles.input}
-            placeholder={placeholder}
-            placeholderTextColor={COLORS.textLight}
-            value={message}
-            onChangeText={(text) => {
-              setMessage(text);
-              handleTyping();
-            }}
-            multiline
-            maxLength={500}
-            returnKeyType="default"
-            blurOnSubmit={false}
-            editable={!disabled}
-          />
+          <View style={styles.inputWrapper}>
+            {selectedEmoticon && (
+              <View style={styles.selectedEmoticonContainer}>
+                <Image 
+                  source={selectedEmoticon.source} 
+                  style={styles.selectedEmoticon} 
+                  resizeMode="contain"
+                />
+                <TouchableOpacity 
+                  style={styles.removeEmoticonButton}
+                  onPress={() => setSelectedEmoticon(null)}
+                >
+                  <Ionicons name="close-circle" size={16} color={COLORS.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            )}
+            <TextInput
+              ref={inputRef}
+              style={[styles.input, selectedEmoticon ? styles.inputWithEmoticon : null]}
+              placeholder={selectedEmoticon ? '' : placeholder}
+              placeholderTextColor={COLORS.textLight}
+              value={message}
+              onChangeText={(text) => {
+                setMessage(text);
+                handleTyping();
+              }}
+              multiline
+              maxLength={500}
+              returnKeyType="default"
+              blurOnSubmit={false}
+              editable={!disabled}
+            />
+          </View>
 
           <TouchableOpacity
             style={styles.iconButton}
@@ -161,6 +196,13 @@ const ChatInput: React.FC<ChatInputProps> = ({
           </TouchableOpacity>
         </Animated.View>
       </View>
+
+      {/* Emoji Modal */}
+      <EmojiModal 
+        visible={isEmojiModalVisible}
+        onClose={() => setIsEmojiModalVisible(false)}
+        onEmojiSelect={handleEmoticonSelect}
+      />
     </KeyboardAvoidingView>
   );
 };
@@ -185,13 +227,39 @@ const styles = StyleSheet.create({
     marginRight: 8,
     ...SHADOWS.light,
   },
+  inputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   input: {
     flex: 1,
-    ...FONTS.body2,
+    fontFamily: FONTS.body2.fontFamily,
+    fontSize: FONTS.body2.fontSize,
+    fontWeight: FONTS.body2.fontWeight as any, // Type assertion to fix TypeScript error
+    letterSpacing: FONTS.body2.letterSpacing,
     color: COLORS.text,
     maxHeight: 100,
     paddingHorizontal: 8,
     paddingVertical: 10,
+  },
+  inputWithEmoticon: {
+    paddingLeft: 4,
+  },
+  selectedEmoticonContainer: {
+    position: 'relative',
+    marginLeft: 4,
+  },
+  selectedEmoticon: {
+    width: 28,
+    height: 28,
+  },
+  removeEmoticonButton: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    backgroundColor: COLORS.card,
+    borderRadius: 10,
   },
   iconButton: {
     padding: 8,

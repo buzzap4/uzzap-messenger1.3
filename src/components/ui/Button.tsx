@@ -9,7 +9,7 @@ import {
   TouchableOpacityProps,
   View
 } from 'react-native';
-import { COLORS, SIZES, SHADOWS } from '@/theme';
+import { COLORS, SIZES, SHADOWS } from '../../theme';
 import Animated, { 
   useSharedValue, 
   useAnimatedStyle, 

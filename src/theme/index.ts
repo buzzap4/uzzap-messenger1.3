@@ -91,19 +91,19 @@ export const SIZES = {
 };
 
 export const FONTS = {
-  h1: { fontFamily: 'System', fontSize: SIZES.h1, fontWeight: 'bold', letterSpacing: -0.5 },
-  h2: { fontFamily: 'System', fontSize: SIZES.h2, fontWeight: 'bold', letterSpacing: -0.3 },
-  h3: { fontFamily: 'System', fontSize: SIZES.h3, fontWeight: '600', letterSpacing: -0.2 },
-  h4: { fontFamily: 'System', fontSize: SIZES.h4, fontWeight: '600', letterSpacing: -0.1 },
-  body1: { fontFamily: 'System', fontSize: SIZES.body1, fontWeight: 'normal', letterSpacing: 0 },
-  body2: { fontFamily: 'System', fontSize: SIZES.body2, fontWeight: 'normal', letterSpacing: 0 },
-  body3: { fontFamily: 'System', fontSize: SIZES.body3, fontWeight: 'normal', letterSpacing: 0 },
-  small: { fontFamily: 'System', fontSize: SIZES.small, fontWeight: 'normal', letterSpacing: 0.2 },
+  h1: { fontFamily: 'System', fontSize: SIZES.h1, fontWeight: 'bold' as const, letterSpacing: -0.5 },
+  h2: { fontFamily: 'System', fontSize: SIZES.h2, fontWeight: 'bold' as const, letterSpacing: -0.3 },
+  h3: { fontFamily: 'System', fontSize: SIZES.h3, fontWeight: '600' as const, letterSpacing: -0.2 },
+  h4: { fontFamily: 'System', fontSize: SIZES.h4, fontWeight: '600' as const, letterSpacing: -0.1 },
+  body1: { fontFamily: 'System', fontSize: SIZES.body1, fontWeight: 'normal' as const, letterSpacing: 0 },
+  body2: { fontFamily: 'System', fontSize: SIZES.body2, fontWeight: 'normal' as const, letterSpacing: 0 },
+  body3: { fontFamily: 'System', fontSize: SIZES.body3, fontWeight: 'normal' as const, letterSpacing: 0 },
+  small: { fontFamily: 'System', fontSize: SIZES.small, fontWeight: 'normal' as const, letterSpacing: 0.2 },
   
   // Additional font styles
-  bodyBold1: { fontFamily: 'System', fontSize: SIZES.body1, fontWeight: 'bold', letterSpacing: 0 },
-  bodyBold2: { fontFamily: 'System', fontSize: SIZES.body2, fontWeight: 'bold', letterSpacing: 0 },
-  bodyBold3: { fontFamily: 'System', fontSize: SIZES.body3, fontWeight: 'bold', letterSpacing: 0 },
+  bodyBold1: { fontFamily: 'System', fontSize: SIZES.body1, fontWeight: 'bold' as const, letterSpacing: 0 },
+  bodyBold2: { fontFamily: 'System', fontSize: SIZES.body2, fontWeight: 'bold' as const, letterSpacing: 0 },
+  bodyBold3: { fontFamily: 'System', fontSize: SIZES.body3, fontWeight: 'bold' as const, letterSpacing: 0 },
 };
 
 export const SHADOWS = {

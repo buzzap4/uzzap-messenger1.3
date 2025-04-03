@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   TouchableOpacityProps,
 } from 'react-native';
-import { COLORS, SHADOWS, SIZES } from '@/theme';
+import { COLORS, SHADOWS, SIZES } from '../../theme';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,

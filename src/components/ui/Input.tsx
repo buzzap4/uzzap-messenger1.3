@@ -9,7 +9,7 @@ import {
   TextInputProps,
   TouchableOpacity,
 } from 'react-native';
-import { COLORS, FONTS, SIZES } from '@/theme';
+import { COLORS, FONTS, SIZES } from '../../theme';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -110,8 +110,8 @@ const Input: React.FC<InputProps> = ({
           style={[
             styles.input,
             inputStyle,
-            leftIcon && { paddingLeft: 0 },
-            rightIcon && { paddingRight: 0 },
+            leftIcon ? { paddingLeft: 0 } : null,
+            rightIcon ? { paddingRight: 0 } : null,
           ]}
           placeholderTextColor={COLORS.textLight}
           onFocus={handleFocus}
@@ -138,7 +138,10 @@ const styles = StyleSheet.create({
     marginBottom: SIZES.padding,
   },
   label: {
-    ...FONTS.body3,
+    fontFamily: FONTS.body3.fontFamily,
+    fontSize: FONTS.body3.fontSize,
+    fontWeight: FONTS.body3.fontWeight,
+    letterSpacing: FONTS.body3.letterSpacing,
     color: COLORS.textSecondary,
     marginBottom: SIZES.base / 2,
   },
@@ -152,7 +155,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   input: {
-    ...FONTS.body2,
+    fontFamily: FONTS.body2.fontFamily,
+    fontSize: FONTS.body2.fontSize,
+    fontWeight: FONTS.body2.fontWeight,
+    letterSpacing: FONTS.body2.letterSpacing,
     color: COLORS.text,
     paddingHorizontal: SIZES.padding,
     paddingVertical: SIZES.base * 1.5,
@@ -171,7 +177,10 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   errorText: {
-    ...FONTS.body3,
+    fontFamily: FONTS.body3.fontFamily,
+    fontSize: FONTS.body3.fontSize,
+    fontWeight: FONTS.body3.fontWeight,
+    letterSpacing: FONTS.body3.letterSpacing,
     color: COLORS.error,
     marginTop: SIZES.base / 2,
   },

@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Switch, TouchableOpacity, ScrollView, Modal, Alert } from 'react-native';
-import { useTheme } from '@/context/theme';
+import { useTheme } from '../../context/theme';
 import { Bell, Moon, Sun, Globe, Lock, Shield, HelpCircle, LogOut, Info } from 'lucide-react-native';
-import { useAuth } from '@/context/auth';
-import { supabase } from '@/lib/supabase'; // Ensure you have a Supabase client setup
+import { useAuth } from '../../context/auth';
+import { supabase } from '../../lib/supabase'; // Ensure you have a Supabase client setup
 import { useRouter } from 'expo-router'; // Import router for navigation
-import { registerForPushNotifications } from '@/src/services/notificationService';
-import { useLanguage } from '@/context/language';
+import { registerForPushNotifications } from '../../src/services/notificationService';
+import { useLanguage } from '../../context/language';
 
 export default function SettingsScreen() {
   const { setTheme, isDark, colors } = useTheme();

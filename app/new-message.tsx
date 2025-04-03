@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { Search, ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '@/context/auth';
-import Avatar from '@/components/Avatar';
+import Avatar from '@/src/components/ui/Avatar';
 import { useTheme } from '@/context/theme';
 
 interface User {
@@ -129,8 +129,13 @@ export default function NewMessageScreen() {
             <Avatar
               uri={item.avatar_url}
               username={item.username}
-              size={48}
-              style={styles.avatar}
+              size={40}
+              imageStyle={{
+                backgroundColor: '#f5f5f5',
+              }}
+              containerStyle={{
+                marginRight: 12,
+              }}
             />
             <Text style={[styles.username, { color: colors.text }]}>{item.username}</Text>
           </TouchableOpacity>

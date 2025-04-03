@@ -1,16 +1,16 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useFrameworkReady } from '@/hooks/useFrameworkReady';
+import { useFrameworkReady } from '../hooks/useFrameworkReady';
 import { useColorScheme } from 'react-native';
-import { ThemeProvider, useTheme } from '@/context/theme';
-import { AuthProvider } from '@/context/auth';
-import { ToastProvider } from '@/context/toast';
+import { ThemeProvider, useTheme } from '../context/theme';
+import { AuthProvider } from '../context/auth';
+import { ToastProvider } from '../context/toast';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { COLORS } from '@/theme';
+import { COLORS } from '../src/theme';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -67,6 +67,7 @@ function StackNavigator() {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   useFrameworkReady();
+  const [isReady, setIsReady] = useState(false);
 
   const [fontsLoaded, fontError] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -77,10 +78,19 @@ export default function RootLayout() {
   useEffect(() => {
     if (fontsLoaded || fontError) {
       SplashScreen.hideAsync();
+      // Add a small delay to ensure all resources are loaded before rendering
+      setTimeout(() => {
+        setIsReady(true);
+      }, 100);
     }
   }, [fontsLoaded, fontError]);
 
   if (!fontsLoaded && !fontError) {
+    return null;
+  }
+  
+  // Don't render the app until everything is ready
+  if (!isReady) {
     return null;
   }
 

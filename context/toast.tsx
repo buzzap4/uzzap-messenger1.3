@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
-import Toast, { ToastType } from '@/components/Toast';
+import Toast, { ToastType } from '../src/components/common/Toast';
 import { Animated } from 'react-native';
 
 interface ToastContextType {

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Platform, ActivityIndicator, Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, Image } from 'react-native';
 import { Link, router } from 'expo-router';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '../../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { COLORS, FONTS, SIZES, SHADOWS } from '@/theme';
+import { COLORS, FONTS, SIZES, SHADOWS } from '../../src/theme';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -150,7 +150,7 @@ export default function SignUp() {
           <Animated.View style={[styles.logoContainer, logoAnimStyle]}>
             <Image
               source={require('../../assets/uzzap-logo.png')}
-              style={styles.logoImage}
+              style={styles.logoImage as any}
               resizeMode="contain"
             />
           </Animated.View>
@@ -296,7 +296,10 @@ const styles = StyleSheet.create({
     marginBottom: SIZES.padding,
   },
   errorText: {
-    ...FONTS.body3,
+    fontFamily: FONTS.body3.fontFamily,
+    fontSize: FONTS.body3.fontSize,
+    fontWeight: FONTS.body3.fontWeight,
+    letterSpacing: FONTS.body3.letterSpacing,
     color: COLORS.error,
     textAlign: 'center',
   },
@@ -310,13 +313,18 @@ const styles = StyleSheet.create({
     marginTop: SIZES.padding,
   },
   signInText: {
-    ...FONTS.body3,
+    fontFamily: FONTS.body3.fontFamily,
+    fontSize: FONTS.body3.fontSize,
+    fontWeight: FONTS.body3.fontWeight,
+    letterSpacing: FONTS.body3.letterSpacing,
     color: COLORS.textSecondary,
   },
   signInLink: {
-    ...FONTS.body3,
+    fontFamily: FONTS.body3.fontFamily,
+    fontSize: FONTS.body3.fontSize,
+    fontWeight: '600' as const,
+    letterSpacing: FONTS.body3.letterSpacing,
     color: COLORS.primary,
-    fontWeight: '600',
   },
 });
 

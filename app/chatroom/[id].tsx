@@ -11,11 +11,11 @@ import {
   Text,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { useAuth } from '@/context/auth';
-import { useMessages } from '@/src/hooks/useMessages';
-import { supabase } from '@/lib/supabase';
-import { Message as MessageType, User } from '@/src/types/models';
-import { COLORS, SIZES } from '@/theme';
+import { useAuth } from '../../context/auth';
+import { useMessages } from '../../src/hooks/useMessages';
+import { supabase } from '../../lib/supabase';
+import { Message as MessageType, User } from '../../src/types/models';
+import { COLORS, SIZES } from '../../src/theme';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -28,15 +28,15 @@ import Animated, {
 } from 'react-native-reanimated';
 
 // Import our new UI components
-import ChatHeader from '@/src/components/chat/ChatHeader';
-import ChatInput from '@/src/components/chat/ChatInput';
-import ChatBubble from '@/src/components/chat/ChatBubble';
-import Button from '@/src/components/ui/Button';
-import Card from '@/src/components/ui/Card';
+import ChatHeader from '../../src/components/chat/ChatHeader';
+import ChatInput from '../../src/components/chat/ChatInput';
+import ChatBubble from '../../src/components/chat/ChatBubble';
+import Button from '../../src/components/ui/Button';
+import Card from '../../src/components/ui/Card';
 
 // Import services
-import { sendMessage } from '@/src/services/messageService';
-import { joinChatroom, verifyOrJoinChatroom } from '@/src/services/chatroomService';
+import { sendMessage } from '../../src/services/messageService';
+import { joinChatroom, verifyOrJoinChatroom } from '../../src/services/chatroomService';
 
 // Define the getChatroom function since it's missing
 const getChatroom = async (chatroomId: string) => {

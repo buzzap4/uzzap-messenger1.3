@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Image,
@@ -8,36 +8,65 @@ import {
   Text,
   TouchableOpacity,
 } from 'react-native';
-import { COLORS, FONTS, SIZES } from '@/theme';
+import { COLORS, FONTS } from '../../theme';
 import LinearGradient from 'react-native-linear-gradient';
+import { DEFAULT_AVATAR_URL, FALLBACK_AVATAR_URL } from '@/lib/constants';
 
+/**
+ * Avatar component props
+ */
 interface AvatarProps {
+  /** Image URI for the avatar */
   uri?: string | null;
+  /** Size of the avatar (width and height) */
   size?: number;
+  /** User's name (used for initials and fallback) */
   name?: string;
+  /** Username (used for fallback avatar generation) */
+  username?: string;
+  /** Function to call when avatar is pressed */
   onPress?: () => void;
+  /** Additional styles for the container */
   containerStyle?: ViewStyle;
+  /** Additional styles for the image */
   imageStyle?: ImageStyle;
+  /** Legacy style prop for backward compatibility */
+  style?: ImageStyle;
+  /** Whether to show online status indicator */
   showStatus?: boolean;
+  /** User's online status */
   status?: 'online' | 'offline' | 'away' | 'busy';
+  /** Whether to show border around avatar */
   showBorder?: boolean;
+  /** Color of the border */
   borderColor?: string;
+  /** Width of the border */
   borderWidth?: number;
 }
 
+/**
+ * Avatar component that displays user avatar with fallback options
+ * - Shows image if URI is provided
+ * - Falls back to initials on gradient background if name is provided
+ * - Falls back to generated avatar if username is provided
+ */
 const Avatar: React.FC<AvatarProps> = ({
   uri,
   size = 40,
   name,
+  username,
   onPress,
   containerStyle,
   imageStyle,
+  style, // Add support for legacy style prop
   showStatus = false,
   status = 'offline',
   showBorder = false,
   borderColor = COLORS.primary,
   borderWidth = 2,
 }) => {
+  // Track if the image failed to load
+  const [hasError, setHasError] = useState(false);
   // Generate initials from name
   const getInitials = () => {
     if (!name) return '';
@@ -86,6 +115,26 @@ const Avatar: React.FC<AvatarProps> = ({
     ['#00B09B', '#96C93D'],
   ];
 
+  /**
+   * Get avatar URL with fallback options
+   */
+  const getAvatarUrl = () => {
+    if (!hasError && uri) return uri;
+    
+    // If we have a username, use DiceBear Avataaars with username seed
+    if (username) {
+      const primaryFallback = `${DEFAULT_AVATAR_URL}?seed=${username}&backgroundColor=random`;
+      const secondaryFallback = `${FALLBACK_AVATAR_URL}?seed=${username}`;
+      return hasError ? secondaryFallback : primaryFallback;
+    }
+    
+    // No fallback URL needed if we're showing initials
+    return '';
+  };
+
+  /**
+   * Render the avatar content based on available data
+   */
   const renderContent = () => {
     const containerDimensions = {
       width: size,
@@ -93,19 +142,23 @@ const Avatar: React.FC<AvatarProps> = ({
       borderRadius: size / 2,
     };
 
-    if (uri) {
+    // If we have a URI and no error, or we have a username for fallback
+    if ((uri && !hasError) || username) {
       return (
         <Image
-          source={{ uri }}
+          source={{ uri: getAvatarUrl() }}
           style={[
             styles.image,
             containerDimensions,
             imageStyle,
+            style, // Include legacy style prop
           ]}
+          onError={() => setHasError(true)}
           defaultSource={require('@/assets/default-avatar.png')}
         />
       );
     } else {
+      // Fallback to initials on gradient background
       return (
         <LinearGradient
           colors={getColorFromName()}

@@ -1,14 +1,14 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Alert, Modal, TextInput, Platform } from 'react-native';
 import { SvgUri } from 'react-native-svg';
-import { useAuth } from '@/context/auth';
+import { useAuth } from '../../context/auth';
 import { MessageCircle, Users, Clock, Camera, ImagePlus, Edit2 } from 'lucide-react-native';
-import { createProfile, getProfile, updateProfile } from '@/src/services/profileService';
-import { useTheme } from '@/context/theme';
-import { handleError } from '@/lib/errorHandler';
+import { createProfile, getProfile, updateProfile } from '../../src/services/profileService';
+import { useTheme } from '../../context/theme';
+import { handleError } from '../../lib/errorHandler';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase } from '@/lib/supabase';
-import { storageConfig } from '@/src/config/storage';
+import { supabase } from '../../lib/supabase';
+import { storageConfig } from '../../src/config/storage';
 
 interface Profile {
   id: string;

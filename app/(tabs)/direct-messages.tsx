@@ -2,10 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { Search, Plus, Loader2 } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/auth';
-import { useTheme } from '@/context/theme';
-import Avatar from '@/components/Avatar';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../context/auth';
+import { useTheme } from '../../context/theme';
+import Avatar from '../../src/components/ui/Avatar';
 
 interface DirectMessage {
   id: string;

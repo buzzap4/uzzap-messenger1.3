@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase, fetchUserRole } from '@/lib/supabase';
+import { supabase, fetchUserRole } from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { useRouter, useSegments } from 'expo-router';
 import { Alert } from 'react-native';
@@ -31,31 +31,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
   const segments = useSegments();
   const router = useRouter();
+  const isMounted = React.useRef(true);
 
-  const clearAuthError = () => setAuthError(null);
+  // Safe state setters that only update if component is mounted
+  const safeSetSession = (value: Session | null) => {
+    if (isMounted.current) setSession(value);
+  };
+  
+  const safeSetUserRole = (value: string | undefined) => {
+    if (isMounted.current) setUserRole(value);
+  };
+  
+  const safeSetLoading = (value: boolean) => {
+    if (isMounted.current) setLoading(value);
+  };
+  
+  const safeSetAuthError = (value: string | null) => {
+    if (isMounted.current) setAuthError(value);
+  };
+
+  const clearAuthError = () => safeSetAuthError(null);
+
+  // Cleanup function to set isMounted to false when component unmounts
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const fetchSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
         if (error) {
-          setAuthError(`Session check error: ${error.message}`);
+          safeSetAuthError(`Session check error: ${error.message}`);
           return;
         }
 
         if (session) {
-          setSession(session);
+          safeSetSession(session);
           try {
             const role = await fetchUserRole(session.user.id);
-            setUserRole(role || undefined);
+            safeSetUserRole(role || undefined);
           } catch (roleError) {
-            setAuthError(`Failed to fetch user role: ${roleError instanceof Error ? roleError.message : 'Unknown error'}`);
+            safeSetAuthError(`Failed to fetch user role: ${roleError instanceof Error ? roleError.message : 'Unknown error'}`);
           }
         }
       } catch (e) {
-        setAuthError(`Unexpected error: ${e instanceof Error ? e.message : 'Unknown error'}`);
+        safeSetAuthError(`Unexpected error: ${e instanceof Error ? e.message : 'Unknown error'}`);
       } finally {
-        setLoading(false);
+        safeSetLoading(false);
       }
     };
 
@@ -64,21 +89,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: Session | null) => {
       try {
         if (session) {
-          setSession(session);
+          safeSetSession(session);
           try {
             const role = await fetchUserRole(session.user.id);
-            setUserRole(role || undefined);
+            safeSetUserRole(role || undefined);
           } catch (roleError) {
-            setAuthError(`Failed to fetch user role: ${roleError instanceof Error ? roleError.message : 'Unknown error'}`);
+            safeSetAuthError(`Failed to fetch user role: ${roleError instanceof Error ? roleError.message : 'Unknown error'}`);
           }
         } else {
-          setSession(null);
-          setUserRole(undefined);
+          safeSetSession(null);
+          safeSetUserRole(undefined);
         }
       } catch (e) {
-        setAuthError(`Auth state change error: ${e instanceof Error ? e.message : 'Unknown error'}`);
+        safeSetAuthError(`Auth state change error: ${e instanceof Error ? e.message : 'Unknown error'}`);
       } finally {
-        setLoading(false);
+        safeSetLoading(false);
       }
 
       if (!session) {
@@ -110,7 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       router.replace('/sign-in');
     } catch (error) {
       const errorMessage = `Error signing out: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      setAuthError(errorMessage);
+      safeSetAuthError(errorMessage);
       Alert.alert('Sign Out Error', errorMessage);
     }
   };
@@ -126,7 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       router.replace('/');
     } catch (error) {
       const errorMessage = `Error completing onboarding: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      setAuthError(errorMessage);
+      safeSetAuthError(errorMessage);
       Alert.alert('Onboarding Error', errorMessage);
       throw error;
     }

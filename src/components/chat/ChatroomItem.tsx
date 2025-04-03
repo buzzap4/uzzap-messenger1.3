@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   Pressable,
 } from 'react-native';
-import { COLORS, FONTS, SIZES, SHADOWS } from '@/theme';
+import { COLORS, FONTS, SIZES, SHADOWS } from '../../theme';
 import Avatar from '../ui/Avatar';
 import { format, isToday, isYesterday } from 'date-fns';
 import Animated, {

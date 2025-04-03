@@ -6,8 +6,9 @@ import {
   TouchableOpacity,
   Pressable,
   Alert,
+  Image,
 } from 'react-native';
-import { COLORS, FONTS, SIZES, SHADOWS } from '@/theme';
+import { COLORS, FONTS, SIZES, SHADOWS } from '../../theme';
 import Avatar from '../ui/Avatar';
 import { Message, User } from '@/src/types/models';
 import Animated, {
@@ -18,6 +19,7 @@ import Animated, {
   interpolate,
 } from 'react-native-reanimated';
 import { format } from 'date-fns';
+import EmoticonRenderer from './EmoticonRenderer';
 
 interface ChatBubbleProps {
   message: Message;
@@ -181,9 +183,26 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
                 This message has been deleted
               </Text>
             ) : (
-              <Text style={[styles.messageText, getTextStyle()]}>
-                {message.content}
-              </Text>
+              <View style={styles.messageContent}>
+                {message.emoticon_id && message.emoticon_source ? (
+                  <View style={styles.emoticonContainer}>
+                    <Image
+                      source={message.emoticon_source}
+                      style={styles.emoticon as any}
+                      resizeMode="contain"
+                    />
+                    {message.content.trim() !== '' && (
+                      <Text style={[styles.messageText, getTextStyle(), styles.messageWithEmoticon]}>
+                        {message.content}
+                      </Text>
+                    )}
+                  </View>
+                ) : (
+                  <Text style={[styles.messageText, getTextStyle()]}>
+                    {message.content}
+                  </Text>
+                )}
+              </View>
             )}
 
             {shouldShowTimestamp() && (
@@ -226,7 +245,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   username: {
-    ...FONTS.body3,
+    fontFamily: FONTS.body3.fontFamily,
+    fontSize: FONTS.body3.fontSize,
+    fontWeight: 'normal',
+    letterSpacing: FONTS.body3.letterSpacing,
     color: COLORS.textSecondary,
     marginBottom: 2,
     marginLeft: 4,
@@ -296,8 +318,10 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 18,
   },
   messageText: {
-    ...FONTS.body2,
+    fontFamily: FONTS.body2.fontFamily,
     fontSize: 15,
+    fontWeight: 'normal',
+    letterSpacing: FONTS.body2.letterSpacing,
   },
   currentUserText: {
     color: COLORS.card,
@@ -306,12 +330,18 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
   deletedText: {
-    ...FONTS.body3,
+    fontFamily: FONTS.body3.fontFamily,
+    fontSize: FONTS.body3.fontSize,
+    fontWeight: 'normal',
+    letterSpacing: FONTS.body3.letterSpacing,
     fontStyle: 'italic',
     color: COLORS.textLight,
   },
   timestamp: {
-    ...FONTS.small,
+    fontFamily: FONTS.small.fontFamily,
+    fontSize: FONTS.small.fontSize,
+    fontWeight: 'normal',
+    letterSpacing: FONTS.small.letterSpacing,
     marginTop: 4,
     alignSelf: 'flex-end',
   },
@@ -323,6 +353,22 @@ const styles = StyleSheet.create({
   },
   pressedBubble: {
     opacity: 0.8,
+  },
+  messageContent: {
+    flexDirection: 'column',
+  },
+  emoticonContainer: {
+    flexDirection: 'column',
+    alignItems: 'center',
+  },
+  emoticon: {
+    width: 60,
+    height: 60,
+    marginBottom: 4,
+  },
+  messageWithEmoticon: {
+    marginTop: 4,
+    textAlign: 'center',
   },
 });
 

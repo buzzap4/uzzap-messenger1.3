@@ -13,12 +13,12 @@ import {
   Dimensions
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '../../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@/context/auth';
-import { joinChatroom, leaveChatroom, isUserInChatroom } from '@/src/services/chatroomService';
-import type { Region, Province } from '@/types/Region';
-import { COLORS, SIZES, SHADOWS } from '@/theme';
+import { useAuth } from '../../context/auth';
+import { joinChatroom, leaveChatroom, isUserInChatroom } from '../../src/services/chatroomService';
+import type { Region, Province } from '../../types/Region';
+import { COLORS, SIZES, SHADOWS } from '../../src/theme';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -34,9 +34,9 @@ import Animated, {
 import LinearGradient from 'react-native-linear-gradient';
 
 // Import our UI components
-import Button from '@/src/components/ui/Button';
-import Card from '@/src/components/ui/Card';
-import ChatroomItem from '@/src/components/chat/ChatroomItem';
+import Button from '../../src/components/ui/Button';
+import Card from '../../src/components/ui/Card';
+import ChatroomItem from '../../src/components/chat/ChatroomItem';
 
 const { width } = Dimensions.get('window');
 

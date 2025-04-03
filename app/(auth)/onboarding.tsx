@@ -6,7 +6,7 @@ import { User, Upload } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth';
 import { createProfile } from '@/src/services/profileService';
-import Avatar from '@/components/Avatar';
+import Avatar from '@/src/components/ui/Avatar';
 import { storageConfig } from '../../src/config/storage';
 import { handleError, getErrorMessage } from '@/lib/errorHandler';
 import { DEFAULT_AVATAR_URL } from '@/lib/constants';

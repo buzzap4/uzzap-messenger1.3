@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Platform, ActivityIndicator, Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, Image, Dimensions } from 'react-native';
 import { Link, router } from 'expo-router';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '../../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { COLORS, SIZES, SHADOWS } from '@/theme';
+import { COLORS, SIZES, SHADOWS } from '../../src/theme';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -18,10 +18,10 @@ import Animated, {
 } from 'react-native-reanimated';
 
 // Import our UI components
-import Button from '@/src/components/ui/Button';
-import Input from '@/src/components/ui/Input';
-import Card from '@/src/components/ui/Card';
-import AuthBackground from '@/src/components/ui/AuthBackground';
+import Button from '../../src/components/ui/Button';
+import Input from '../../src/components/ui/Input';
+import Card from '../../src/components/ui/Card';
+import AuthBackground from '../../src/components/ui/AuthBackground';
 
 const { width } = Dimensions.get('window');
 

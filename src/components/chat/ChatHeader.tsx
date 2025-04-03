@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   Platform,
 } from 'react-native';
-import { COLORS, FONTS, SIZES, SHADOWS } from '@/theme';
+import { COLORS, FONTS, SIZES, SHADOWS } from '../../theme';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../ui/Avatar';
 import { useRouter } from 'expo-router';
@@ -166,11 +166,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    ...FONTS.h4,
+    fontFamily: FONTS.h4.fontFamily,
+    fontSize: FONTS.h4.fontSize,
+    fontWeight: '600',
+    letterSpacing: FONTS.h4.letterSpacing,
     color: COLORS.text,
   },
   subtitle: {
-    ...FONTS.body3,
+    fontFamily: FONTS.body3.fontFamily,
+    fontSize: FONTS.body3.fontSize,
+    fontWeight: 'normal',
+    letterSpacing: FONTS.body3.letterSpacing,
     color: COLORS.textSecondary,
   },
   infoButton: {

@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { supabase } from '@/lib/supabase';
-import Avatar from '@/components/Avatar';
-import { useTheme } from '@/context/theme';
-import { useAuth } from '@/context/auth'; // Import useAuth
-import { fetchSceneryImages } from '@/src/services/imageService'; // Update the import path
+import { supabase } from '../../lib/supabase';
+import Avatar from '../../src/components/ui/Avatar';
+import { useTheme } from '../../context/theme';
+import { useAuth } from '../../context/auth'; // Import useAuth
+import { fetchSceneryImages } from '../../src/services/imageService'; // Update the import path
 import { format } from 'date-fns'; // Add this import
 
 interface ChatroomWithMessages {
@@ -85,7 +85,7 @@ export default function ChatsScreen() {
         uri={item.lastMessage?.sender?.avatar_url}
         username={item.lastMessage?.sender?.username || 'Unknown'}
         size={50}
-        style={styles.avatar}
+        containerStyle={{ marginRight: 16 }}
       />
       <View style={styles.chatInfo}>
         <View style={styles.chatHeader}>
